@@ -1,5 +1,5 @@
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi'
-import { celoSepolia } from '@reown/appkit/networks'
+import { celo, celoSepolia } from '@reown/appkit/networks'
 import { createAppKit } from '@reown/appkit/react'
 import { QueryClient } from '@tanstack/react-query'
 import type { AppKitNetwork } from '@reown/appkit/networks'
@@ -11,7 +11,7 @@ if (!projectId) {
 }
 
 // Ensure type compatibility for AppKit
-export const networks = [celoSepolia] as [AppKitNetwork, ...AppKitNetwork[]]
+export const networks = [celo, celoSepolia] as [AppKitNetwork, ...AppKitNetwork[]]
 
 export const wagmiAdapter = new WagmiAdapter({
     networks,
