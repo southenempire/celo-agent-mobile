@@ -5,7 +5,7 @@ import {
     Sun, Moon, Info, X, Sparkles, HelpCircle, CheckCircle2, Clock
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useAccount } from 'wagmi';
+import { useAccount, useChainId } from 'wagmi';
 import { useAppKit } from '@reown/appkit/react';
 import { useAgent } from './hooks/useAgent';
 import { type TransactionHistory } from './lib/agent-core';
@@ -22,6 +22,11 @@ interface Message {
 
 const App: React.FC = () => {
     const { address, isConnected } = useAccount();
+    const chainId = useChainId();
+    const isTestnet = chainId === 11155111 || chainId === 44787; // Sepolia or Alfajores (though we use Sepolia)
+    const explorerUrl = isTestnet ? 'https://sepolia.celoscan.io' : 'https://celoscan.io';
+    const networkName = isTestnet ? 'Celo Sepolia' : 'Celo Mainnet';
+
     const { open } = useAppKit();
     const agent = useAgent();
 
@@ -119,7 +124,7 @@ const App: React.FC = () => {
                 const result = await agent.processIntent(textToSend);
 
                 // Update to Step 2: Broadcasting
-                setMessages(prev => prev.map(m => m.id === agentMsgId ? { ...m, text: "Broadcasting transaction to Celo Sepolia Mainframe...", status: 'broadcasting' } : m));
+                setMessages(prev => prev.map(m => m.id === agentMsgId ? { ...m, text: `Broadcasting transaction to ${networkName} Mainframe...`, status: 'broadcasting' } : m));
 
                 // Simulate a small delay for "Feeling" the transfer
                 await new Promise(r => setTimeout(r, 1500));
@@ -238,6 +243,9 @@ const App: React.FC = () => {
                     </motion.div>
                     <div>
                         <h1 className="text-xl font-black tracking-tighter leading-none mb-1">CRIA <span className="text-celo-green">PRO</span></h1>
+                        <div className={`text-[9px] font-black px-2 py-0.5 rounded-md ${isTestnet ? 'bg-orange-500/20 text-orange-500 border border-orange-500/30' : 'bg-celo-green/20 text-celo-green border border-celo-green/30'}`}>
+                            {isTestnet ? 'TESTNET' : 'MAINNET'}
+                        </div>
                         <div className="flex items-center gap-1.5">
                             <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-celo-green animate-pulse' : 'bg-orange-400'}`}></span>
                             <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${isDarkMode ? 'opacity-80' : 'opacity-60'}`}>{isConnected ? 'LIVE' : 'OFFLINE'}</span>
@@ -286,10 +294,10 @@ const App: React.FC = () => {
                                         className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}
                                     >
                                         <div className={`max-w-[85%] px-6 py-4 transition-all relative ${m.sender === 'user'
-                                                ? 'bg-celo-green text-white rounded-[32px] rounded-tr-none shadow-2xl shadow-celo-green/20 font-bold'
-                                                : isDarkMode
-                                                    ? 'bg-white/5 backdrop-blur-md border border-white/10 rounded-[32px] rounded-tl-none font-medium'
-                                                    : 'bg-white/40 backdrop-blur-md border border-white/60 rounded-[32px] rounded-tl-none font-medium text-[#2E3338]'
+                                            ? 'bg-celo-green text-white rounded-[32px] rounded-tr-none shadow-2xl shadow-celo-green/20 font-bold'
+                                            : isDarkMode
+                                                ? 'bg-white/5 backdrop-blur-md border border-white/10 rounded-[32px] rounded-tl-none font-medium'
+                                                : 'bg-white/40 backdrop-blur-md border border-white/60 rounded-[32px] rounded-tl-none font-medium text-[#2E3338]'
                                             } ${m.isSupport ? 'ring-2 ring-celo-gold/30' : ''} ${m.status && m.status !== 'success' && m.status !== 'error' ? 'ring-2 ring-celo-green/20' : ''}`}>
 
                                             {/* Step Indicator for Transactions */}
@@ -314,15 +322,15 @@ const App: React.FC = () => {
                                             <div className="flex items-center gap-3 mt-3">
                                                 {m.provider && (
                                                     <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg border ${m.provider === 'openai' ? 'text-blue-400 border-blue-400/20 bg-blue-400/10' :
-                                                            m.provider === 'gemini' ? 'text-purple-400 border-purple-400/20 bg-purple-400/10' :
-                                                                'text-gray-400 border-gray-400/20 bg-gray-400/10'
+                                                        m.provider === 'gemini' ? 'text-purple-400 border-purple-400/20 bg-purple-400/10' :
+                                                            'text-gray-400 border-gray-400/20 bg-gray-400/10'
                                                         }`}>
                                                         AUTOFILLED: {m.provider}
                                                     </span>
                                                 )}
                                                 {m.hash && (
                                                     <a
-                                                        href={`https://sepolia.celoscan.io/tx/${m.hash}`}
+                                                        href={`${explorerUrl}/tx/${m.hash}`}
                                                         target="_blank"
                                                         rel="noopener noreferrer"
                                                         className="text-[11px] flex items-center gap-1.5 text-celo-green font-black active:scale-95 transition-all hover:bg-celo-green/20 bg-celo-green/10 px-3 py-1 rounded-full border border-celo-green/20"
@@ -494,7 +502,7 @@ const App: React.FC = () => {
                                                     <p className={`text-[11px] font-bold uppercase tracking-widest ${isDarkMode ? 'text-white/40' : 'text-celo-dark/40'}`}>{tx.recipient.slice(0, 12)}...</p>
                                                 </div>
                                             </div>
-                                            <a href={`https://sepolia.celoscan.io/tx/${tx.hash}`} target="_blank" rel="noopener noreferrer">
+                                            <a href={`${explorerUrl}/tx/${tx.hash}`} target="_blank" rel="noopener noreferrer">
                                                 <div className="p-2 rounded-xl bg-celo-green/10 text-celo-green border border-celo-green/20">
                                                     <ChevronRight size={18} />
                                                 </div>
