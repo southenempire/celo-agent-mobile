@@ -13,7 +13,11 @@ export default {
           green: '#35D07F',
           dark: '#2E3338',
           light: '#636669',
-        }
+        },
+      },
+      boxShadow: {
+        'glass': '0 8px 32px 0 rgba(31, 38, 135, 0.07)',
+        'glass-dark': '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
       },
       animation: {
         'fade-in': 'fadeIn 0.3s ease-out',
