@@ -1,353 +1,367 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
-    Send, Wallet, Smartphone, ShieldCheck, MapPin, Loader2, Link as LinkIcon,
-    LayoutDashboard, MessageSquare, ArrowUpRight, Coins, Zap, BarChart3, ChevronRight,
-    Sun, Moon, Info, X, Sparkles, HelpCircle, CheckCircle2, Clock
+    Send, Wallet, Loader2, Link as LinkIcon,
+    LayoutDashboard, MessageSquare, ArrowUpRight, ArrowDownLeft,
+    Coins, BarChart3, ChevronRight, Sun, Moon, Info,
+    ShieldCheck, Zap, CheckCircle2, Clock, Globe, RefreshCw, Bot, Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useAccount, useChainId } from 'wagmi';
+import { useAccount, useChainId, useWalletClient, usePublicClient } from 'wagmi';
 import { useAppKit } from '@reown/appkit/react';
 import { useAgent } from './hooks/useAgent';
 import { type TransactionHistory } from './lib/agent-core';
+import { registerAgentOnChain, formatAgentRegistry, ERC8004_REGISTRY } from './lib/erc8004';
 
 interface Message {
     id: string;
     text: string;
     sender: 'user' | 'agent';
-    status?: 'pending' | 'success' | 'error' | 'initiating' | 'broadcasting' | 'securing';
+    status?: 'pending' | 'success' | 'error' | 'initiating' | 'broadcasting' | 'securing' | 'info';
     hash?: string;
     provider?: string;
-    isSupport?: boolean;
 }
+
+const QUICK_ACTIONS = [
+    { label: '💸 Send', prompt: 'Send 0.05 USDC to ' },
+    { label: '💰 Balance', prompt: 'What is my current balance?' },
+    { label: '📈 NGN Rate', prompt: 'What is the NGN exchange rate?' },
+    { label: '🌍 KES Rate', prompt: 'What is the KES exchange rate?' },
+    { label: '🤖 Help', prompt: 'What can you do?' },
+];
+
+const spring = { type: 'spring', damping: 22, stiffness: 300 };
 
 const App: React.FC = () => {
     const { address, isConnected } = useAccount();
     const chainId = useChainId();
-    const isTestnet = chainId === 11155111 || chainId === 44787; // Sepolia or Alfajores (though we use Sepolia)
+    const { data: walletClientRaw } = useWalletClient();
+    const publicClientRaw = usePublicClient();
+    const isTestnet = chainId === 11155111 || chainId === 44787;
     const explorerUrl = isTestnet ? 'https://sepolia.celoscan.io' : 'https://celoscan.io';
-    const networkName = isTestnet ? 'Celo Sepolia' : 'Celo Mainnet';
+    const networkName = isTestnet ? 'Celo Sepolia' : 'Celo';
 
     const { open } = useAppKit();
     const agent = useAgent();
 
     const [view, setView] = useState<'chat' | 'dashboard'>('chat');
-    const [messages, setMessages] = useState<Message[]>([
-        { id: '1', text: 'Eyoo! I am CRIA, your intelligent Celo Remittance Agent. You can speak naturally to me—how can I help move value today?', sender: 'agent' }
-    ]);
+    const [messages, setMessages] = useState<Message[]>([{
+        id: '1',
+        text: "Hey! I'm CRIA — your Celo Remittance Agent 🟡\n\nI understand natural language:\n• \"Send 5 USDC to 0x...\"\n• \"What's my balance?\"\n• \"What's the NGN rate today?\"",
+        sender: 'agent'
+    }]);
     const [input, setInput] = useState('');
     const [isTyping, setIsTyping] = useState(false);
-    const [isSupportMode, setIsSupportMode] = useState(false);
-    const [isDarkMode, setIsDarkMode] = useState(false);
-    const [showTour, setShowTour] = useState(() => !localStorage.getItem('cria_tour_seen'));
+    const [isDarkMode, setIsDarkMode] = useState(true);
+    const [showWelcome, setShowWelcome] = useState(() => !localStorage.getItem('cria_v2_seen'));
     const [history, setHistory] = useState<TransactionHistory[]>([]);
     const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+    const [liveRate, setLiveRate] = useState<string>('...');
+    const [agentId, setAgentId] = useState<string | null>(() => localStorage.getItem('cria_agent_id'));
+    const [isRegistering, setIsRegistering] = useState(false);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
-    const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    };
+    useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, isTyping]);
+    useEffect(() => { document.documentElement.classList.toggle('dark', isDarkMode); }, [isDarkMode]);
 
     useEffect(() => {
-        scrollToBottom();
-    }, [messages, isTyping]);
-
-    useEffect(() => {
-        if (isDarkMode) {
-            document.documentElement.classList.add('dark');
-        } else {
-            document.documentElement.classList.remove('dark');
-        }
-    }, [isDarkMode]);
+        fetch('https://api.frankfurter.app/latest?from=USD&to=NGN')
+            .then(r => r.json())
+            .then(d => { if (d.rates?.NGN) setLiveRate(`₦${Math.round(d.rates.NGN).toLocaleString()}`); })
+            .catch(() => setLiveRate('₦1,600'));
+    }, []);
 
     useEffect(() => {
         if (view === 'dashboard' && isConnected && address && agent) {
-            const fetchHistory = async () => {
-                setIsLoadingHistory(true);
-                try {
-                    const txs = await agent.getTransactionHistory(address as `0x${string}`);
-                    setHistory(txs);
-                } catch (e) {
-                    console.error(e);
-                } finally {
-                    setIsLoadingHistory(false);
-                }
-            };
-            fetchHistory();
+            setIsLoadingHistory(true);
+            agent.getTransactionHistory(address as `0x${string}`)
+                .then(setHistory).catch(console.error)
+                .finally(() => setIsLoadingHistory(false));
         }
     }, [view, isConnected, address, agent]);
 
     const handleSend = async (customText?: string) => {
-        const textToSend = customText || input;
-        if (!textToSend.trim()) return;
+        const text = customText || input;
+        if (!text.trim() || isTyping) return;
 
-        const userMsgId = Date.now().toString();
-        setMessages(prev => [...prev, { id: userMsgId, text: textToSend, sender: 'user' }]);
+        setMessages(prev => [...prev, { id: Date.now().toString(), text, sender: 'user' }]);
         if (!customText) setInput('');
 
-        if (isSupportMode) {
-            setIsTyping(true);
-            setTimeout(() => {
-                setMessages(prev => [...prev, {
-                    id: Date.now().toString(),
-                    text: "I'm in Support Mode! I can help with wallet issues, network errors, or transaction stuck cases. How specifically can I help?",
-                    sender: 'agent',
-                    isSupport: true
-                }]);
-                setIsTyping(false);
-            }, 1000);
-            return;
-        }
-
         if (!isConnected) {
-            setMessages(prev => [...prev, {
-                id: (Date.now() + 1).toString(),
-                text: "Please connect your wallet first so I can help you with that!",
-                sender: 'agent'
-            }]);
+            setTimeout(() => setMessages(prev => [...prev, {
+                id: Date.now().toString(),
+                text: "Connect your wallet first to get started! Tap the wallet icon ↗",
+                sender: 'agent', status: 'info'
+            }]), 300);
             return;
         }
 
+        if (!agent) return;
         setIsTyping(true);
+        const agentMsgId = (Date.now() + 1).toString();
 
         try {
-            if (agent) {
-                // Step 1: Initiating
-                const agentMsgId = (Date.now() + 2).toString();
-                setMessages(prev => [...prev, {
-                    id: agentMsgId,
-                    text: "Analyzing your intent and preparing technical payload...",
-                    sender: 'agent',
-                    status: 'initiating'
-                }]);
+            setMessages(prev => [...prev, { id: agentMsgId, text: "Analyzing intent...", sender: 'agent', status: 'initiating' }]);
+            const result = await agent.processIntent(text);
 
-                const result = await agent.processIntent(textToSend);
-
-                // Update to Step 2: Broadcasting
-                setMessages(prev => prev.map(m => m.id === agentMsgId ? { ...m, text: `Broadcasting transaction to ${networkName} Mainframe...`, status: 'broadcasting' } : m));
-
-                // Simulate a small delay for "Feeling" the transfer
-                await new Promise(r => setTimeout(r, 1500));
-
-                // Update to Step 3: Securing
-                setMessages(prev => prev.map(m => m.id === agentMsgId ? { ...m, text: "Securing block on-chain. Finalizing remittance...", status: 'securing' } : m));
-
-                await new Promise(r => setTimeout(r, 1000));
-
+            if (result.replyText) {
                 setIsTyping(false);
                 setMessages(prev => prev.map(m => m.id === agentMsgId ? {
-                    ...m,
-                    text: `Transaction executed! I've sent ${result.intent.amount} ${result.intent.currency} to ${result.intent.recipient.slice(0, 6)}... (Delivery estimate: < 5s). A small service fee of 0.01 USDC was applied.`,
-                    status: 'success',
-                    hash: result.hash,
-                    provider: result.provider
+                    ...m, text: result.replyText!, status: 'info', provider: result.provider
                 } : m));
+                return;
             }
-        } catch (error: any) {
+
+            // Send flow steps
+            setMessages(prev => prev.map(m => m.id === agentMsgId ? { ...m, text: `Broadcasting to ${networkName}...`, status: 'broadcasting' } : m));
+            await new Promise(r => setTimeout(r, 1200));
+            setMessages(prev => prev.map(m => m.id === agentMsgId ? { ...m, text: "Confirming on-chain...", status: 'securing' } : m));
+            await new Promise(r => setTimeout(r, 800));
+
             setIsTyping(false);
-            setMessages(prev => [...prev, {
-                id: Date.now().toString(),
-                text: `Error: ${error.message}`,
-                sender: 'agent',
-                status: 'error'
-            }]);
+            const { intent, hash, provider } = result;
+            setMessages(prev => prev.map(m => m.id === agentMsgId ? {
+                ...m,
+                text: `✅ Sent ${intent.amount} ${intent.currency || 'USDC'} to ${intent.recipient?.slice(0, 6)}...${intent.recipient?.slice(-4)}\nFee: 0.01 ${intent.currency || 'USDC'} · ~5s settlement`,
+                status: 'success', hash, provider
+            } : m));
+        } catch (err: any) {
+            setIsTyping(false);
+            setMessages(prev => prev.map(m => m.id === agentMsgId ? { ...m, text: `❌ ${err.message}`, status: 'error' } : m));
         }
     };
 
-    const closeTour = () => {
-        setShowTour(false);
-        localStorage.setItem('cria_tour_seen', 'true');
+    const handleRegisterAgent = async () => {
+        if (!walletClientRaw || !publicClientRaw || isRegistering) return;
+        setIsRegistering(true);
+        try {
+            const { agentId: id, txHash } = await registerAgentOnChain(walletClientRaw as any, publicClientRaw as any);
+            setAgentId(id);
+            localStorage.setItem('cria_agent_id', id);
+            if (txHash) {
+                setView('chat');
+                setMessages(prev => [...prev, {
+                    id: Date.now().toString(),
+                    text: `🎉 CRIA registered on-chain!\nERC-8004 Agent ID: #${id}`,
+                    sender: 'agent', status: 'success', hash: txHash
+                }]);
+            }
+        } catch (err: any) {
+            setView('chat');
+            setMessages(prev => [...prev, { id: Date.now().toString(), text: `❌ Registration failed: ${err.message}`, sender: 'agent', status: 'error' }]);
+        } finally {
+            setIsRegistering(false);
+        }
     };
 
-    const calculateRank = () => {
-        const count = history.length;
-        if (count > 20) return "DIAMOND PRIME";
-        if (count > 10) return "GOLD ELITE";
-        if (count > 2) return "SILVER VOYAGER";
-        return "NOVICE CITIZEN";
-    };
+    const rank = (() => {
+        const c = history.length;
+        if (c > 20) return { label: 'DIAMOND', color: 'text-cyan-400' };
+        if (c > 10) return { label: 'GOLD', color: 'text-celo-gold' };
+        if (c > 2) return { label: 'SILVER', color: 'text-gray-300' };
+        return { label: 'NOVICE', color: 'text-white/50' };
+    })();
 
-    const quickActions = [
-        { label: 'Send Money', prompt: 'Send 0.05 USDC to ' },
-        { label: 'Check Balance', prompt: 'What is my current balance?' },
-        { label: 'History', prompt: 'Show my recent history' },
-        { label: 'Exchange Rate', prompt: 'What is the rate for NGN?' }
-    ];
+    const totalValue = history.filter(t => t.status === 'sent').reduce((s, t) => s + parseFloat(t.amount), 0).toFixed(2);
 
-    const totalValueMoved = history.reduce((acc, tx) => acc + parseFloat(tx.amount), 0).toFixed(2);
+    const dark = isDarkMode;
 
     return (
-        <div className={`flex flex-col h-screen max-w-md mx-auto ${isDarkMode ? 'bg-[#0F1115] text-white' : 'bg-[#F2F4F7] text-[#2E3338]'} shadow-2xl relative overflow-hidden font-sans transition-colors duration-500`}>
+        <div className={`flex flex-col h-screen max-w-md mx-auto relative overflow-hidden font-sans transition-colors duration-500 ${dark ? 'bg-[#080B12] text-white' : 'bg-[#EEF1F6] text-[#1A1F2E]'}`}>
 
-            {/* Dynamic Animated Background Blobs */}
-            <div className="absolute top-[-10%] left-[-10%] w-[60%] h-[40%] bg-celo-gold/20 blur-[120px] rounded-full animate-pulse" />
-            <div className="absolute bottom-[-10%] right-[-10%] w-[60%] h-[40%] bg-celo-green/20 blur-[120px] rounded-full animate-pulse" style={{ animationDelay: '2s' }} />
+            {/* Ambient background blobs */}
+            <div className="pointer-events-none absolute inset-0 overflow-hidden">
+                <div className={`absolute -top-24 -left-16 w-80 h-80 rounded-full blur-[120px] transition-colors duration-700 ${dark ? 'bg-celo-green/10' : 'bg-celo-green/15'}`} />
+                <div className={`absolute -bottom-24 -right-16 w-80 h-80 rounded-full blur-[120px] transition-colors duration-700 ${dark ? 'bg-celo-gold/8' : 'bg-celo-gold/15'}`} />
+                <div className={`absolute top-1/2 left-1/3 w-48 h-48 rounded-full blur-[100px] ${dark ? 'bg-purple-500/5' : 'bg-purple-400/8'}`} />
+            </div>
 
-            {/* Tour Card Overlay */}
+            {/* Welcome Modal */}
             <AnimatePresence>
-                {showTour && (
+                {showWelcome && (
                     <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="absolute inset-0 z-50 bg-black/40 backdrop-blur-md flex items-center justify-center p-6"
+                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                        className="absolute inset-0 z-50 flex items-center justify-center p-6 bg-black/70 backdrop-blur-xl"
                     >
                         <motion.div
-                            initial={{ scale: 0.9, y: 30 }}
+                            initial={{ scale: 0.88, y: 32 }}
                             animate={{ scale: 1, y: 0 }}
-                            className={`${isDarkMode ? 'glass-dark' : 'glass'} p-8 rounded-[40px] relative overflow-hidden max-w-[340px] shadow-2xl`}
+                            exit={{ scale: 0.88, opacity: 0 }}
+                            transition={spring}
+                            className={`w-full max-w-[340px] rounded-[32px] p-7 relative overflow-hidden ${dark ? 'bg-[#0F1520] border border-white/10' : 'bg-white border border-gray-100'} shadow-2xl`}
                         >
-                            <div className="absolute top-0 right-0 p-4">
-                                <button onClick={closeTour} className="text-gray-400 hover:text-celo-green transition-colors"><X size={24} /></button>
+                            {/* Gradient accent top */}
+                            <div className="absolute inset-x-0 top-0 h-1 gradient-border rounded-t-[32px]" />
+
+                            <div className="w-14 h-14 bg-gradient-to-br from-celo-gold via-amber-400 to-celo-green rounded-2xl flex items-center justify-center mb-5 shadow-lg shadow-celo-gold/30 float">
+                                <Sparkles className="text-white w-7 h-7" />
                             </div>
-                            <div className="w-16 h-16 bg-celo-gold/30 rounded-[24px] flex items-center justify-center mb-6 shadow-lg shadow-celo-gold/20">
-                                <Sparkles className="text-celo-gold w-8 h-8" />
-                            </div>
-                            <h2 className="text-2xl font-black mb-4 tracking-tight">CRIA Pro</h2>
-                            <p className="text-sm opacity-80 leading-relaxed mb-6 font-medium">
-                                The future of remittances is here. Just speak to send value across borders with military-grade resilience.
+                            <h2 className="text-[22px] font-black tracking-tight mb-1">Welcome to CRIA</h2>
+                            <p className={`text-[13px] leading-relaxed mb-6 ${dark ? 'text-white/50' : 'text-gray-500'}`}>
+                                The fastest way to move money on Celo. Just talk to it.
                             </p>
-                            <ul className="space-y-4 mb-8">
-                                <li className="flex gap-3 text-sm font-bold items-center">
-                                    <div className="w-6 h-6 bg-celo-green/20 rounded-full flex items-center justify-center flex-shrink-0">
-                                        <Zap size={12} className="text-celo-green" />
+                            <div className="space-y-3 mb-7">
+                                {[
+                                    { icon: <Zap size={12} className="text-celo-green" />, label: 'Natural language payments' },
+                                    { icon: <Globe size={12} className="text-celo-green" />, label: 'Live exchange rates' },
+                                    { icon: <ShieldCheck size={12} className="text-celo-green" />, label: 'ERC-8004 agent identity' },
+                                    { icon: <CheckCircle2 size={12} className="text-celo-green" />, label: '~5 second settlement' },
+                                ].map((f, i) => (
+                                    <div key={i} className={`flex items-center gap-3 text-[13px] font-semibold ${dark ? 'text-white/80' : 'text-gray-700'}`}>
+                                        <div className="w-6 h-6 rounded-lg bg-celo-green/15 flex items-center justify-center">{f.icon}</div>
+                                        {f.label}
                                     </div>
-                                    Zero-Friction Flows
-                                </li>
-                                <li className="flex gap-3 text-sm font-bold items-center">
-                                    <div className="w-6 h-6 bg-celo-green/20 rounded-full flex items-center justify-center flex-shrink-0">
-                                        <ShieldCheck size={12} className="text-celo-green" />
-                                    </div>
-                                    ERC-8004 Identity
-                                </li>
-                            </ul>
+                                ))}
+                            </div>
                             <button
-                                onClick={closeTour}
-                                className="w-full py-4 bg-celo-green text-white font-black rounded-[20px] hover:shadow-[0_12px_24px_rgba(53,208,127,0.4)] transition-all active:scale-95 shadow-lg"
+                                onClick={() => { setShowWelcome(false); localStorage.setItem('cria_v2_seen', '1'); }}
+                                className="btn-primary w-full py-4 text-[13px] tracking-widest uppercase"
                             >
-                                UNLEASH CRIA
+                                Let's Go →
                             </button>
                         </motion.div>
                     </motion.div>
                 )}
             </AnimatePresence>
 
-            {/* Glass Header */}
-            <header className={`sticky top-0 z-40 px-6 py-5 flex items-center justify-between transition-all duration-300 ${isDarkMode ? 'bg-black/20 font-bold' : 'bg-white/20 font-bold'} backdrop-blur-2xl border-b ${isDarkMode ? 'border-white/5' : 'border-white/40'}`}>
-                <div className="flex items-center gap-4">
+            {/* ── HEADER ── */}
+            <header className={`sticky top-0 z-40 flex items-center justify-between px-5 py-3.5 border-b backdrop-blur-2xl transition-all ${dark ? 'border-white/6 bg-[#080B12]/80' : 'border-black/5 bg-[#EEF1F6]/80'}`}>
+                <div className="flex items-center gap-3">
                     <motion.div
-                        whileHover={{ scale: 1.1, rotate: 5 }}
-                        className="w-11 h-11 bg-celo-gold rounded-2xl flex items-center justify-center shadow-2xl shadow-celo-gold/40 transform -rotate-2"
+                        whileHover={{ scale: 1.1, rotate: 8 }} whileTap={{ scale: 0.92 }}
+                        className="w-10 h-10 bg-gradient-to-br from-celo-gold to-amber-400 rounded-[14px] flex items-center justify-center shadow-lg shadow-celo-gold/25"
                     >
-                        <Smartphone className="text-white w-6 h-6" />
+                        <Bot className="text-white w-5 h-5" />
                     </motion.div>
                     <div>
-                        <h1 className="text-xl font-black tracking-tighter leading-none mb-1">CRIA <span className="text-celo-green">PRO</span></h1>
-                        <div className={`text-[9px] font-black px-2 py-0.5 rounded-md ${isTestnet ? 'bg-orange-500/20 text-orange-500 border border-orange-500/30' : 'bg-celo-green/20 text-celo-green border border-celo-green/30'}`}>
-                            {isTestnet ? 'TESTNET' : 'MAINNET'}
+                        <div className="flex items-center gap-2">
+                            <span className="text-[16px] font-black tracking-tight">CRIA <span className="text-celo-green">PRO</span></span>
+                            {agentId && (
+                                <motion.span
+                                    initial={{ scale: 0 }} animate={{ scale: 1 }}
+                                    className="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-celo-green/20 text-celo-green border border-celo-green/30"
+                                >
+                                    #{agentId}
+                                </motion.span>
+                            )}
                         </div>
-                        <div className="flex items-center gap-1.5">
-                            <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-celo-green animate-pulse' : 'bg-orange-400'}`}></span>
-                            <span className={`text-[10px] font-black uppercase tracking-[0.2em] ${isDarkMode ? 'opacity-80' : 'opacity-60'}`}>{isConnected ? 'LIVE' : 'OFFLINE'}</span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className={`w-1.5 h-1.5 rounded-full glow-dot ${isConnected ? 'bg-celo-green' : 'bg-amber-400'}`} />
+                            <span className={`text-[9px] font-bold uppercase tracking-widest ${dark ? 'text-white/40' : 'text-gray-400'}`}>
+                                {isConnected ? `${networkName} · Live` : 'Disconnected'}
+                            </span>
                         </div>
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
-                    <button
-                        onClick={() => setIsDarkMode(!isDarkMode)}
-                        className={`p-3 rounded-2xl transition-all shadow-sm border ${isDarkMode ? 'bg-white/10 border-white/10 text-celo-gold' : 'bg-white/60 border-white/60 text-celo-dark'}`}
-                    >
-                        {isDarkMode ? <Sun size={18} /> : <Sun size={18} className="text-gray-400" />}
+
+                <div className="flex items-center gap-1.5">
+                    <button onClick={() => setIsDarkMode(!dark)}
+                        className={`p-2 rounded-xl transition-all ${dark ? 'text-white/40 hover:text-white/80 hover:bg-white/6' : 'text-gray-400 hover:text-gray-700 hover:bg-black/5'}`}>
+                        {dark ? <Sun size={16} /> : <Moon size={16} />}
                     </button>
                     <button
-                        onClick={() => setView(view === 'chat' ? 'dashboard' : 'chat')}
-                        className={`p-3 rounded-2xl transition-all shadow-sm border ${view === 'dashboard' ? 'bg-celo-green text-white border-celo-green' : isDarkMode ? 'bg-white/10 border-white/10 text-white' : 'bg-white/60 border-white/60 text-celo-dark'}`}
-                    >
-                        {view === 'chat' ? <LayoutDashboard size={18} /> : <MessageSquare size={18} />}
+                        onClick={() => setView(v => v === 'chat' ? 'dashboard' : 'chat')}
+                        className={`p-2 rounded-xl transition-all ${view === 'dashboard' ? 'bg-celo-green/20 text-celo-green' : dark ? 'text-white/40 hover:text-white/80 hover:bg-white/6' : 'text-gray-400 hover:text-gray-700 hover:bg-black/5'}`}>
+                        {view === 'chat' ? <LayoutDashboard size={16} /> : <MessageSquare size={16} />}
                     </button>
                     <button
                         onClick={() => open()}
-                        className={`p-3 rounded-2xl transition-all active:scale-95 shadow-sm border ${isConnected ? 'bg-celo-green/20 border-celo-green/30 text-celo-green' : isDarkMode ? 'bg-white/10 border-white/10 text-white' : 'bg-white/60 border-white/60 text-celo-dark'
-                            }`}
-                    >
+                        className={`p-2 rounded-xl transition-all active:scale-90 ${isConnected ? 'bg-celo-green/15 text-celo-green border border-celo-green/25' : dark ? 'text-white/40 hover:text-white/80 hover:bg-white/6' : 'text-gray-400 hover:bg-black/5'}`}>
                         <Wallet className="w-4 h-4" />
                     </button>
                 </div>
             </header>
 
+            {/* ── VIEWS ── */}
             <AnimatePresence mode="wait">
+
+                {/* ━━ CHAT ━━ */}
                 {view === 'chat' ? (
-                    <motion.div
-                        key="chat"
-                        initial={{ opacity: 0, scale: 0.98 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.98 }}
-                        className="flex-1 flex flex-col overflow-hidden relative"
-                    >
-                        <main className={`flex-1 overflow-y-auto px-5 py-8 space-y-8 scrollbar-hide z-10`}>
+                    <motion.div key="chat"
+                        initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }}
+                        transition={{ duration: 0.22 }}
+                        className="flex-1 flex flex-col overflow-hidden">
+
+                        {/* Messages */}
+                        <main className="flex-1 overflow-y-auto px-4 py-5 space-y-3 scrollbar-hide">
                             <AnimatePresence initial={false}>
                                 {messages.map((m) => (
-                                    <motion.div
-                                        key={m.id}
-                                        initial={{ opacity: 0, y: 20, scale: 0.9 }}
+                                    <motion.div key={m.id}
+                                        initial={{ opacity: 0, y: 14, scale: 0.96 }}
                                         animate={{ opacity: 1, y: 0, scale: 1 }}
-                                        className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+                                        transition={spring}
+                                        className={`flex ${m.sender === 'user' ? 'justify-end' : 'justify-start'} items-end gap-2`}
                                     >
-                                        <div className={`max-w-[85%] px-6 py-4 transition-all relative ${m.sender === 'user'
-                                            ? 'bg-celo-green text-white rounded-[32px] rounded-tr-none shadow-2xl shadow-celo-green/20 font-bold'
-                                            : isDarkMode
-                                                ? 'bg-white/5 backdrop-blur-md border border-white/10 rounded-[32px] rounded-tl-none font-medium'
-                                                : 'bg-white/40 backdrop-blur-md border border-white/60 rounded-[32px] rounded-tl-none font-medium text-[#2E3338]'
-                                            } ${m.isSupport ? 'ring-2 ring-celo-gold/30' : ''} ${m.status && m.status !== 'success' && m.status !== 'error' ? 'ring-2 ring-celo-green/20' : ''}`}>
+                                        {/* Avatar */}
+                                        {m.sender === 'agent' && (
+                                            <div className="w-7 h-7 flex-shrink-0 rounded-xl bg-gradient-to-br from-celo-gold to-amber-400 flex items-center justify-center shadow-md mb-0.5">
+                                                <Bot size={13} className="text-white" />
+                                            </div>
+                                        )}
 
-                                            {/* Step Indicator for Transactions */}
-                                            {m.status && m.status !== 'success' && m.status !== 'error' && (
+                                        <div className={`max-w-[78%] relative rounded-2xl px-4 py-3 ${
+                                            m.sender === 'user'
+                                                ? 'bg-gradient-to-br from-celo-green to-emerald-500 text-white rounded-br-[6px] shadow-lg shadow-celo-green/20'
+                                                : m.status === 'error'
+                                                    ? dark ? 'bg-red-500/12 border border-red-500/20 rounded-bl-[6px]' : 'bg-red-50 border border-red-200 rounded-bl-[6px]'
+                                                    : m.status === 'success'
+                                                        ? dark ? 'bg-celo-green/10 border border-celo-green/20 rounded-bl-[6px]' : 'bg-emerald-50 border border-emerald-200 rounded-bl-[6px]'
+                                                        : dark ? 'bg-white/6 border border-white/8 rounded-bl-[6px]' : 'bg-white/90 border border-gray-100 rounded-bl-[6px] shadow-sm'
+                                        }`}>
+
+                                            {/* Progress bar */}
+                                            {m.status && !['success', 'error', 'info'].includes(m.status) && (
                                                 <div className="flex gap-1 mb-2">
-                                                    <div className={`h-1 flex-1 rounded-full transition-all duration-500 ${m.status === 'initiating' ? 'bg-celo-green animate-pulse' : 'bg-celo-green'}`}></div>
-                                                    <div className={`h-1 flex-1 rounded-full transition-all duration-500 ${m.status === 'broadcasting' ? 'bg-celo-green animate-pulse' : m.status === 'securing' ? 'bg-celo-green' : 'bg-gray-200/20'}`}></div>
-                                                    <div className={`h-1 flex-1 rounded-full transition-all duration-500 ${m.status === 'securing' ? 'bg-celo-green animate-pulse' : 'bg-gray-200/20'}`}></div>
+                                                    {['initiating', 'broadcasting', 'securing'].map((s, i) => {
+                                                        const idx = ['initiating', 'broadcasting', 'securing'].indexOf(m.status || '');
+                                                        return <div key={s} className={`h-[2px] flex-1 rounded-full transition-all duration-700 ${i <= idx ? i === idx ? 'bg-celo-green animate-pulse' : 'bg-celo-green' : dark ? 'bg-white/10' : 'bg-gray-200'}`} />;
+                                                    })}
                                                 </div>
                                             )}
 
-                                            <p className="text-[15px] leading-relaxed">
+                                            {/* Success badge */}
+                                            {m.status === 'success' && (
+                                                <div className="absolute -top-2 -right-2 w-5 h-5 bg-celo-green rounded-full flex items-center justify-center shadow-md">
+                                                    <CheckCircle2 size={11} className="text-white" />
+                                                </div>
+                                            )}
+
+                                            <p className={`text-[13.5px] leading-relaxed whitespace-pre-line font-medium ${m.sender === 'user' ? 'text-white' : dark ? 'text-white/90' : 'text-gray-800'}`}>
                                                 {m.text}
                                             </p>
 
-                                            {m.status === 'success' && (
-                                                <div className="absolute -top-2 -right-2 bg-celo-green rounded-full p-1 shadow-lg">
-                                                    <CheckCircle2 size={16} className="text-white" />
+                                            {(m.hash || m.provider) && (
+                                                <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                                                    {m.provider && (
+                                                        <span className={`text-[9px] font-black uppercase tracking-[0.1em] px-1.5 py-0.5 rounded border ${
+                                                            m.provider === 'openai' ? 'text-blue-400 border-blue-400/20 bg-blue-400/8'
+                                                            : m.provider === 'gemini' ? 'text-purple-400 border-purple-400/20 bg-purple-400/8'
+                                                            : 'text-gray-400 border-gray-400/20 bg-gray-400/8'}`}>
+                                                            {m.provider}
+                                                        </span>
+                                                    )}
+                                                    {m.hash && (
+                                                        <a href={`${explorerUrl}/tx/${m.hash}`} target="_blank" rel="noopener noreferrer"
+                                                            className="text-[10px] flex items-center gap-1 font-bold text-celo-green bg-celo-green/10 border border-celo-green/25 px-2 py-0.5 rounded-full hover:bg-celo-green/20 transition-all">
+                                                            <LinkIcon size={9} /> Verify on-chain
+                                                        </a>
+                                                    )}
                                                 </div>
                                             )}
-
-                                            <div className="flex items-center gap-3 mt-3">
-                                                {m.provider && (
-                                                    <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg border ${m.provider === 'openai' ? 'text-blue-400 border-blue-400/20 bg-blue-400/10' :
-                                                        m.provider === 'gemini' ? 'text-purple-400 border-purple-400/20 bg-purple-400/10' :
-                                                            'text-gray-400 border-gray-400/20 bg-gray-400/10'
-                                                        }`}>
-                                                        AUTOFILLED: {m.provider}
-                                                    </span>
-                                                )}
-                                                {m.hash && (
-                                                    <a
-                                                        href={`${explorerUrl}/tx/${m.hash}`}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="text-[11px] flex items-center gap-1.5 text-celo-green font-black active:scale-95 transition-all hover:bg-celo-green/20 bg-celo-green/10 px-3 py-1 rounded-full border border-celo-green/20"
-                                                    >
-                                                        <LinkIcon size={12} /> EXPLORER
-                                                    </a>
-                                                )}
-                                            </div>
                                         </div>
                                     </motion.div>
                                 ))}
+
+                                {/* Typing indicator */}
                                 {isTyping && (
-                                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex justify-start">
-                                        <div className={`${isDarkMode ? 'bg-white/5 border-white/10' : 'bg-white/40 border-white/60'} backdrop-blur-md px-5 py-4 rounded-[24px] rounded-tl-none flex gap-2 items-center`}>
-                                            <span className="w-1.5 h-1.5 bg-celo-green rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                                            <span className="w-1.5 h-1.5 bg-celo-green rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                                            <span className="w-1.5 h-1.5 bg-celo-green rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-end gap-2">
+                                        <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-celo-gold to-amber-400 flex items-center justify-center shadow-md">
+                                            <Bot size={13} className="text-white" />
+                                        </div>
+                                        <div className={`px-4 py-3.5 rounded-2xl rounded-bl-[6px] flex gap-1.5 items-center ${dark ? 'bg-white/6 border border-white/8' : 'bg-white/90 border border-gray-100 shadow-sm'}`}>
+                                            {[0, 150, 300].map((d, i) => (
+                                                <span key={i} className="w-1.5 h-1.5 bg-celo-green rounded-full animate-bounce" style={{ animationDelay: `${d}ms` }} />
+                                            ))}
                                         </div>
                                     </motion.div>
                                 )}
@@ -355,164 +369,183 @@ const App: React.FC = () => {
                             <div ref={messagesEndRef} />
                         </main>
 
-                        {/* Quick Action Chips & Exchange Rate */}
-                        <div className={`px-4 pt-4 pb-2 z-20 transition-all ${isDarkMode ? 'bg-black/40' : 'bg-white/40'}`}>
-                            <div className="flex items-center justify-between px-2 mb-3">
-                                <div className="flex items-center gap-2">
-                                    <div className="w-2 h-2 bg-celo-green rounded-full animate-pulse"></div>
-                                    <span className={`text-[10px] font-black uppercase tracking-widest ${isDarkMode ? 'text-white/80' : 'text-celo-dark/70'}`}>1 USDC = ₦1,580 NGN</span>
+                        {/* Rate + Quick Actions */}
+                        <div className={`px-4 pt-3 pb-1 border-t backdrop-blur-xl ${dark ? 'border-white/5 bg-[#080B12]/60' : 'border-black/5 bg-[#EEF1F6]/60'}`}>
+                            <div className="flex items-center justify-between px-1 mb-2">
+                                <div className="flex items-center gap-1.5">
+                                    <span className="w-1.5 h-1.5 bg-celo-green rounded-full animate-pulse" />
+                                    <span className={`text-[10px] font-bold uppercase tracking-wider ${dark ? 'text-white/40' : 'text-gray-400'}`}>
+                                        1 USDC = {liveRate} · NGN
+                                    </span>
                                 </div>
-                                <div className="flex items-center gap-1 opacity-60">
-                                    <Clock size={10} />
-                                    <span className="text-[10px] font-bold italic">~7s confirm</span>
+                                <div className={`flex items-center gap-1 ${dark ? 'text-white/25' : 'text-gray-300'}`}>
+                                    <Clock size={9} />
+                                    <span className="text-[9px] font-bold">~5s settle</span>
                                 </div>
                             </div>
                             <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2">
-                                {quickActions.map(action => (
-                                    <button
-                                        key={action.label}
-                                        onClick={() => handleSend(action.prompt)}
-                                        className={`whitespace-nowrap px-5 py-2.5 rounded-full text-[12px] font-black uppercase tracking-widest border transition-all active:scale-95 shadow-sm ${isDarkMode ? 'bg-white/5 border-white/10 text-white hover:bg-white/10' : 'bg-white border-white/60 text-celo-dark hover:bg-gray-50'
-                                            }`}
-                                    >
-                                        {action.label}
+                                {QUICK_ACTIONS.map(a => (
+                                    <button key={a.label} onClick={() => handleSend(a.prompt)} disabled={isTyping}
+                                        className={`whitespace-nowrap px-3.5 py-2 rounded-full text-[11px] font-semibold border transition-all active:scale-95 disabled:opacity-40 ${dark ? 'bg-white/5 border-white/8 text-white/70 hover:bg-white/10' : 'bg-white/80 border-gray-200 text-gray-600 hover:bg-white'}`}>
+                                        {a.label}
                                     </button>
                                 ))}
                             </div>
                         </div>
 
-                        {/* Glass Input Area */}
-                        <footer className={`p-6 pt-2 z-20 transition-all pb-[env(safe-area-inset-bottom)] ${isDarkMode ? 'bg-black/40' : 'bg-white/40'} backdrop-blur-3xl border-t ${isDarkMode ? 'border-white/5' : 'border-white/20'}`}>
-                            <div className="relative">
-                                <input
-                                    type="text"
-                                    value={input}
-                                    onChange={(e) => setInput(e.target.value)}
-                                    onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                                    placeholder={isConnected ? (isSupportMode ? "Explain issue..." : "Speak naturally to CRIA...") : "Connect Wallet to Start..."}
-                                    disabled={isTyping}
-                                    className={`w-full pl-6 pr-16 py-6 rounded-[32px] border focus:outline-none focus:ring-4 focus:ring-celo-green/20 transition-all shadow-2xl placeholder:text-gray-500 font-bold text-[15px] ${isDarkMode ? 'bg-black/50 border-white/10 text-white' : 'bg-white/80 border-white/40 text-celo-dark'
-                                        }`}
-                                />
-                                <button
+                        {/* Input */}
+                        <footer className={`px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))] backdrop-blur-xl ${dark ? 'bg-[#080B12]/80' : 'bg-[#EEF1F6]/80'}`}>
+                            <div className="flex items-center gap-2">
+                                <div className={`flex-1 flex items-center rounded-[20px] border px-4 transition-all ${dark ? 'bg-white/6 border-white/10 focus-within:border-celo-green/40 focus-within:bg-white/8' : 'bg-white/90 border-gray-200 focus-within:border-celo-green/60 shadow-sm'}`}>
+                                    <input
+                                        type="text"
+                                        value={input}
+                                        onChange={e => setInput(e.target.value)}
+                                        onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
+                                        placeholder={isConnected ? "Talk to CRIA..." : "Connect wallet to start"}
+                                        disabled={isTyping}
+                                        className="flex-1 bg-transparent py-3.5 text-[14px] font-medium focus:outline-none placeholder:text-gray-400"
+                                    />
+                                </div>
+                                <motion.button
+                                    whileTap={{ scale: 0.88 }}
                                     onClick={() => handleSend()}
                                     disabled={!input.trim() || isTyping}
-                                    className="absolute right-2 top-1/2 -translate-y-1/2 bg-celo-green p-4.5 rounded-[24px] text-white hover:shadow-[0_12px_32px_rgba(53,208,127,0.5)] transition-all active:scale-90 disabled:opacity-50 shadow-lg"
+                                    className="w-11 h-11 bg-gradient-to-br from-celo-green to-emerald-500 rounded-[16px] flex items-center justify-center text-white shadow-lg shadow-celo-green/30 transition-all disabled:opacity-40 flex-shrink-0"
+                                    style={{ boxShadow: input.trim() ? '0 6px 20px rgba(53,208,127,0.4)' : undefined }}
                                 >
-                                    {isTyping ? <Loader2 size={24} className="animate-spin" /> : <Send size={24} />}
-                                </button>
+                                    {isTyping ? <Loader2 size={17} className="animate-spin" /> : <Send size={17} />}
+                                </motion.button>
                             </div>
-                            <div className="mt-5 flex justify-between items-center px-4">
-                                <div className={`flex items-center gap-2 ${isDarkMode ? 'opacity-80' : 'opacity-60'}`}>
-                                    <ShieldCheck size={14} className="text-celo-green" />
-                                    <span className="text-[10px] font-black uppercase tracking-widest italic">Encrypted Agentic Layer</span>
-                                </div>
-                                <button
-                                    onClick={() => setIsSupportMode(!isSupportMode)}
-                                    className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest transition-all border flex items-center gap-1.5 shadow-sm ${isSupportMode ? 'bg-celo-gold text-white border-celo-gold' : isDarkMode ? 'bg-white/5 text-gray-400 border-white/10' : 'bg-white/60 text-gray-500 border-white/60'
-                                        }`}
-                                >
-                                    <HelpCircle size={10} /> {isSupportMode ? 'ON RADAR' : 'SUPPORT'}
-                                </button>
-                            </div>
+                            <p className={`text-center text-[9px] font-bold uppercase tracking-widest mt-2 ${dark ? 'text-white/20' : 'text-gray-300'}`}>
+                                Encrypted · Celo L2 · ERC-8004
+                            </p>
                         </footer>
                     </motion.div>
+
                 ) : (
-                    <motion.div
-                        key="dashboard"
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 20 }}
-                        className="flex-1 overflow-y-auto p-6 space-y-8 z-10"
-                    >
-                        {/* Stats Overview */}
-                        <div className="grid grid-cols-2 gap-5">
-                            <div className={`${isDarkMode ? 'glass-card-dark' : 'glass-card'} rounded-[32px] p-6 relative overflow-hidden group transition-all hover:scale-[1.02]`}>
-                                <div className="absolute top-0 right-0 p-4 opacity-20 group-hover:opacity-40 transition-opacity">
-                                    <BarChart3 className="text-celo-green w-10 h-10" />
+                    /* ━━ DASHBOARD ━━ */
+                    <motion.div key="dash"
+                        initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }}
+                        transition={{ duration: 0.22 }}
+                        className="flex-1 overflow-y-auto px-4 py-5 space-y-4 scrollbar-hide pb-8">
+
+                        {/* Stats */}
+                        <div className="grid grid-cols-2 gap-3">
+                            {[
+                                { label: 'Flows', value: history.length, icon: <BarChart3 size={18} />, accent: 'text-celo-green', bg: 'from-celo-green/15 to-emerald-500/5' },
+                                { label: 'Value Sent', value: `$${totalValue}`, icon: <Coins size={18} />, accent: 'text-celo-gold', bg: 'from-celo-gold/15 to-amber-500/5' },
+                            ].map(s => (
+                                <div key={s.label} className={`bg-gradient-to-br ${s.bg} border ${dark ? 'border-white/6' : 'border-white/80'} rounded-[22px] p-5 backdrop-blur-xl group transition-all hover:scale-[1.02]`}>
+                                    <div className={`${s.accent} mb-2 opacity-60 group-hover:opacity-100 transition-opacity`}>{s.icon}</div>
+                                    <p className={`text-[9px] font-black uppercase tracking-[0.18em] mb-1 ${dark ? 'text-white/40' : 'text-gray-400'}`}>{s.label}</p>
+                                    <h3 className="text-2xl font-black">{s.value}</h3>
                                 </div>
-                                <p className={`text-[10px] font-black text-celo-green uppercase tracking-[0.2em] mb-2 ${isDarkMode ? 'opacity-100' : 'opacity-80'}`}>FLOWS</p>
-                                <h3 className="text-3xl font-black italic">{history.length}</h3>
-                            </div>
-                            <div className={`${isDarkMode ? 'glass-card-dark' : 'glass-card'} rounded-[32px] p-6 relative overflow-hidden group transition-all hover:scale-[1.02]`}>
-                                <div className="absolute top-0 right-0 p-4 opacity-20 group-hover:opacity-40 transition-opacity">
-                                    <Coins className="text-celo-gold w-10 h-10" />
-                                </div>
-                                <p className={`text-[10px] font-black text-celo-gold uppercase tracking-[0.2em] mb-2 ${isDarkMode ? 'opacity-100' : 'opacity-80'}`}>VALUE</p>
-                                <h3 className="text-3xl font-black italic">${totalValueMoved}</h3>
-                            </div>
+                            ))}
                         </div>
 
-                        {/* Agent Identity Glass Card */}
-                        <div className="relative group">
-                            <div className="absolute -inset-0.5 bg-gradient-to-r from-celo-gold to-celo-green rounded-[40px] blur opacity-20 group-hover:opacity-40 transition duration-1000 group-hover:duration-200"></div>
-                            <div className={`relative ${isDarkMode ? 'bg-black/40 border-white/5' : 'bg-white/60 border-white/40'} border backdrop-blur-3xl rounded-[40px] p-8 shadow-2xl transition-all`}>
-                                <div className="flex justify-between items-center mb-8">
+                        {/* Agent Passport */}
+                        <div className="relative">
+                            <div className="absolute -inset-[1px] rounded-[26px] gradient-border opacity-50 blur-sm" />
+                            <div className={`relative rounded-[26px] p-6 border ${dark ? 'bg-[#0C1018] border-white/8' : 'bg-white/95 border-white/60'} backdrop-blur-2xl`}>
+                                <div className="flex justify-between items-center mb-5">
                                     <div>
-                                        <h2 className="text-2xl font-black tracking-tighter mb-1 uppercase">Passport</h2>
-                                        <p className={`text-[10px] font-black uppercase tracking-widest italic ${isDarkMode ? 'text-white/80' : 'text-celo-dark/60'}`}>ERC-8004 SOULBOUND IDENTITY</p>
+                                        <h2 className="text-[16px] font-black tracking-tight uppercase">Agent Passport</h2>
+                                        <p className={`text-[9px] font-black uppercase tracking-widest ${dark ? 'text-white/30' : 'text-gray-400'}`}>ERC-8004 · Soulbound Identity</p>
                                     </div>
-                                    <div className="w-12 h-12 bg-celo-green/20 rounded-2xl flex items-center justify-center text-celo-green border border-celo-green/30 animate-pulse">
-                                        <ShieldCheck size={28} />
+                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${agentId ? 'bg-celo-green/15 border-celo-green/30 text-celo-green' : dark ? 'bg-white/5 border-white/8 text-white/30' : 'bg-gray-100 border-gray-200 text-gray-300'}`}>
+                                        <ShieldCheck size={20} />
                                     </div>
                                 </div>
+
                                 {isConnected ? (
-                                    <div className="space-y-6">
-                                        <div className="flex justify-between items-end border-b border-white/10 pb-4">
-                                            <span className={`text-[10px] font-black uppercase tracking-widest ${isDarkMode ? 'text-white/80' : 'text-celo-dark/60'}`}>HOLDER</span>
-                                            <span className="font-mono text-sm font-black truncate max-w-[180px]">{address}</span>
-                                        </div>
-                                        <div className="flex justify-between items-end border-b border-white/10 pb-4">
-                                            <span className={`text-[10px] font-black uppercase tracking-widest ${isDarkMode ? 'text-white/80' : 'text-celo-dark/60'}`}>RANK</span>
-                                            <span className="font-black text-celo-gold uppercase tracking-tighter italic text-lg">{calculateRank()}</span>
-                                        </div>
-                                        <div className="pt-2 flex items-center gap-3">
-                                            <Zap size={16} className="text-celo-gold animate-bounce" />
-                                            <p className={`text-[11px] font-bold leading-tight ${isDarkMode ? 'text-white/80' : 'text-celo-dark/60'}`}>Identity cryptographically anchored based on active relay volume.</p>
+                                    <div className="space-y-0">
+                                        {[
+                                            { label: 'Wallet', value: address ? `${address.slice(0, 10)}...${address.slice(-6)}` : '—' },
+                                            { label: 'Agent ID', value: agentId ? `#${agentId}` : 'Not registered', valueClass: agentId ? 'text-celo-green font-black text-lg' : `${dark ? 'text-white/30' : 'text-gray-400'} italic text-sm` },
+                                            { label: 'Rank', value: rank.label, valueClass: `${rank.color} font-black tracking-wider` },
+                                        ].map((row, i) => (
+                                            <div key={i} className={`flex justify-between items-center py-3 ${i < 2 ? `border-b ${dark ? 'border-white/6' : 'border-gray-100'}` : ''}`}>
+                                                <span className={`text-[9px] font-black uppercase tracking-[0.18em] ${dark ? 'text-white/35' : 'text-gray-400'}`}>{row.label}</span>
+                                                <span className={`font-semibold text-[13px] ${row.valueClass || ''}`}>{row.value}</span>
+                                            </div>
+                                        ))}
+
+                                        <div className="pt-4">
+                                            {!agentId ? (
+                                                <motion.button
+                                                    whileTap={{ scale: 0.97 }}
+                                                    onClick={handleRegisterAgent}
+                                                    disabled={isRegistering}
+                                                    className="btn-primary w-full py-3.5 text-[12px] tracking-widest uppercase flex items-center justify-center gap-2"
+                                                >
+                                                    {isRegistering ? <><Loader2 size={14} className="animate-spin" /> Registering...</> : <><ShieldCheck size={14} /> Register Agent (ERC-8004)</>}
+                                                </motion.button>
+                                            ) : (
+                                                <div className={`flex items-center gap-2 text-[12px] font-semibold ${dark ? 'text-white/40' : 'text-gray-400'}`}>
+                                                    <CheckCircle2 size={14} className="text-celo-green" />
+                                                    Registered · discoverable on Celo
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 ) : (
-                                    <button onClick={() => open()} className="w-full py-5 rounded-[24px] font-black uppercase tracking-widest text-xs bg-celo-green text-white shadow-xl shadow-celo-green/20 active:scale-95 transition-all">SIGN IDENTITY</button>
+                                    <button onClick={() => open()} className="btn-primary w-full py-3.5 text-[12px] tracking-widest uppercase">
+                                        Connect Wallet
+                                    </button>
                                 )}
                             </div>
                         </div>
 
-                        {/* List Glass Card */}
-                        <div className={`${isDarkMode ? 'glass-card-dark' : 'glass-card'} rounded-[40px] p-8`}>
-                            <div className="flex justify-between items-center mb-8">
-                                <h3 className={`font-black uppercase text-[12px] tracking-[0.2em] italic ${isDarkMode ? 'text-white/80' : 'text-celo-dark/60'}`}>TRANSMISSION LOG</h3>
-                                <span className="text-[10px] text-celo-green font-black flex items-center gap-2 bg-celo-green/10 px-3 py-1 rounded-full border border-celo-green/20">
-                                    <span className="w-1.5 h-1.5 bg-celo-green rounded-full animate-ping"></span> LIVE
-                                </span>
+                        {/* Transmission Log */}
+                        <div className={`rounded-[26px] p-5 border ${dark ? 'bg-white/3 border-white/6' : 'bg-white/70 border-white/70'} backdrop-blur-xl`}>
+                            <div className="flex justify-between items-center mb-4">
+                                <span className={`text-[10px] font-black uppercase tracking-[0.18em] ${dark ? 'text-white/40' : 'text-gray-400'}`}>Transmission Log</span>
+                                <div className="flex items-center gap-2">
+                                    <button onClick={() => {
+                                        if (address && agent) {
+                                            setIsLoadingHistory(true);
+                                            agent.getTransactionHistory(address as `0x${string}`).then(setHistory).catch(console.error).finally(() => setIsLoadingHistory(false));
+                                        }
+                                    }} className={`p-1.5 rounded-lg transition-colors ${dark ? 'text-white/25 hover:text-white/60 hover:bg-white/5' : 'text-gray-300 hover:text-gray-500 hover:bg-gray-100'}`}>
+                                        <RefreshCw size={11} className={isLoadingHistory ? 'animate-spin text-celo-green' : ''} />
+                                    </button>
+                                    <span className="text-[9px] font-black text-celo-green bg-celo-green/12 border border-celo-green/20 px-2 py-0.5 rounded-full flex items-center gap-1">
+                                        <span className="w-1 h-1 bg-celo-green rounded-full animate-ping" /> LIVE
+                                    </span>
+                                </div>
                             </div>
-                            <div className="space-y-4">
+
+                            <div className="space-y-2.5">
                                 {isLoadingHistory ? (
-                                    [1, 2, 3].map(i => (
-                                        <div key={i} className="h-24 bg-white/5 rounded-[32px] animate-pulse" />
-                                    ))
+                                    [1, 2, 3].map(i => <div key={i} className={`h-14 rounded-[16px] shimmer ${dark ? 'bg-white/5' : 'bg-gray-100'}`} />)
                                 ) : history.length > 0 ? (
-                                    history.map((tx) => (
-                                        <div key={tx.hash} className={`flex items-center justify-between p-5 rounded-[32px] border transition-all hover:scale-[1.03] active:scale-95 cursor-pointer ${isDarkMode ? 'bg-white/5 border-white/5' : 'bg-white/40 border-white/60'} group`}>
-                                            <div className="flex items-center gap-4">
-                                                <div className={`w-12 h-12 ${isDarkMode ? 'bg-white/10 text-celo-green' : 'bg-celo-green text-white'} rounded-2xl flex items-center justify-center shadow-lg group-hover:rotate-12 transition-transform`}>
-                                                    <ArrowUpRight size={22} />
+                                    history.map(tx => (
+                                        <motion.div key={tx.hash}
+                                            whileHover={{ scale: 1.015 }} whileTap={{ scale: 0.98 }}
+                                            className={`flex items-center justify-between p-3.5 rounded-[18px] border transition-all ${dark ? 'bg-white/4 border-white/5 hover:bg-white/7' : 'bg-white/60 border-gray-100 hover:bg-white'}`}>
+                                            <div className="flex items-center gap-3">
+                                                <div className={`w-9 h-9 rounded-[12px] flex items-center justify-center ${tx.status === 'sent' ? 'bg-celo-green/15 text-celo-green' : 'bg-blue-500/15 text-blue-400'}`}>
+                                                    {tx.status === 'sent' ? <ArrowUpRight size={16} /> : <ArrowDownLeft size={16} />}
                                                 </div>
                                                 <div>
-                                                    <p className={`text-[15px] font-black ${isDarkMode ? 'text-white' : 'text-celo-dark'} leading-tight`}>{tx.amount} {tx.currency}</p>
-                                                    <p className={`text-[11px] font-bold uppercase tracking-widest ${isDarkMode ? 'text-white/40' : 'text-celo-dark/40'}`}>{tx.recipient.slice(0, 12)}...</p>
+                                                    <p className="text-[13px] font-bold">{tx.amount} {tx.currency}</p>
+                                                    <p className={`text-[10px] font-semibold uppercase tracking-wider ${dark ? 'text-white/30' : 'text-gray-400'}`}>
+                                                        {tx.status === 'sent' ? '→' : '←'} {tx.recipient.slice(0, 8)}...
+                                                    </p>
                                                 </div>
                                             </div>
-                                            <a href={`${explorerUrl}/tx/${tx.hash}`} target="_blank" rel="noopener noreferrer">
-                                                <div className="p-2 rounded-xl bg-celo-green/10 text-celo-green border border-celo-green/20">
-                                                    <ChevronRight size={18} />
-                                                </div>
+                                            <a href={`${explorerUrl}/tx/${tx.hash}`} target="_blank" rel="noopener noreferrer"
+                                                className={`p-2 rounded-xl transition-all ${dark ? 'text-white/20 hover:text-celo-green hover:bg-celo-green/10' : 'text-gray-300 hover:text-celo-green hover:bg-celo-green/10'}`}>
+                                                <ChevronRight size={15} />
                                             </a>
-                                        </div>
+                                        </motion.div>
                                     ))
                                 ) : (
-                                    <div className="p-12 text-center opacity-40">
-                                        <Info className="mx-auto mb-4" size={40} />
-                                        <p className="text-sm font-black uppercase tracking-widest italic">Logs Empty</p>
+                                    <div className={`text-center py-10 ${dark ? 'text-white/20' : 'text-gray-300'}`}>
+                                        <Info className="mx-auto mb-2" size={28} />
+                                        <p className="text-[12px] font-bold">No transactions yet</p>
+                                        <p className="text-[11px] mt-0.5">Send your first remittance!</p>
                                     </div>
                                 )}
                             </div>

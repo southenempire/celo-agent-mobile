@@ -4,10 +4,10 @@ import { createAppKit } from '@reown/appkit/react'
 import { QueryClient } from '@tanstack/react-query'
 import type { AppKitNetwork } from '@reown/appkit/networks'
 
-export const projectId = '00000000000000000000000000000000'
+export const projectId = import.meta.env.VITE_PROJECT_ID as string
 
-if (!projectId) {
-    throw new Error('Project ID is not defined')
+if (!projectId || projectId === '00000000000000000000000000000000') {
+    console.error('⚠️ VITE_PROJECT_ID is not set. Get a free project ID at https://cloud.reown.com and add it to .env')
 }
 
 // Ensure type compatibility for AppKit
