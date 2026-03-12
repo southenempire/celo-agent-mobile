@@ -73,7 +73,7 @@ export const CRIA_AGENT_CARD: Omit<AgentCard, 'paymentAddress'> = {
   name: "Celo Remittance Intent Agent (CRIA)",
   description: "An autonomous agent for fast, low-cost remittances on Celo. Understands natural language, settles in ~5 seconds, with ERC-8004 identity and Self Protocol verification.",
   version: "2.0.0",
-  endpoint: "https://cria-agent.vercel.app",
+  endpoint: "https://celo-agent-mobile.vercel.app",
   capabilities: [
     "remittance",
     "stablecoin-transfer",
@@ -99,11 +99,11 @@ export function buildAgentURI(address: string, deployedUrl?: string): string {
     type: "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
     name: "CRIA - Celo Remittance Intent Agent",
     description: CRIA_AGENT_CARD.description,
-    image: "https://cria-agent.vercel.app/icon-512.png",
+    image: "https://celo-agent-mobile.vercel.app/icon-512.png",
     services: [
       {
         name: "web",
-        endpoint: deployedUrl || "https://cria-agent.vercel.app",
+        endpoint: deployedUrl || "https://celo-agent-mobile.vercel.app",
       },
     ],
     x402Support: true,
