@@ -22,11 +22,11 @@ interface Message {
 }
 
 const QUICK_ACTIONS = [
-    { label: '💸 Send', prompt: 'Send 0.05 USDC to ' },
-    { label: '💰 Balance', prompt: 'What is my current balance?' },
-    { label: '📈 NGN Rate', prompt: 'What is the NGN exchange rate?' },
-    { label: '🌍 KES Rate', prompt: 'What is the KES exchange rate?' },
-    { label: '🤖 Help', prompt: 'What can you do?' },
+    { label: '💸 Send', prompt: 'Send 0.05 USDC to ', fillOnly: true },
+    { label: '💰 Balance', prompt: 'What is my current balance?', fillOnly: false },
+    { label: '📈 NGN Rate', prompt: 'What is the NGN exchange rate?', fillOnly: false },
+    { label: '🌍 KES Rate', prompt: 'What is the KES exchange rate?', fillOnly: false },
+    { label: '🤖 Help', prompt: 'What can you do?', fillOnly: false },
 ];
 
 const spring = { type: 'spring', damping: 22, stiffness: 300 };
@@ -385,7 +385,18 @@ const App: React.FC = () => {
                             </div>
                             <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2">
                                 {QUICK_ACTIONS.map(a => (
-                                    <button key={a.label} onClick={() => handleSend(a.prompt)} disabled={isTyping}
+                                    <button key={a.label} onClick={() => {
+                                        if (a.fillOnly) {
+                                            setInput(a.prompt);
+                                            setTimeout(() => {
+                                                const el = document.querySelector('input[type="text"]') as HTMLInputElement;
+                                                el?.focus();
+                                                el?.setSelectionRange(el.value.length, el.value.length);
+                                            }, 50);
+                                        } else {
+                                            handleSend(a.prompt);
+                                        }
+                                    }} disabled={isTyping}
                                         className={`whitespace-nowrap px-3.5 py-2 rounded-full text-[11px] font-semibold border transition-all active:scale-95 disabled:opacity-40 ${dark ? 'bg-white/5 border-white/8 text-white/70 hover:bg-white/10' : 'bg-white/80 border-gray-200 text-gray-600 hover:bg-white'}`}>
                                         {a.label}
                                     </button>
