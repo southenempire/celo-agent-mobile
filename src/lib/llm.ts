@@ -1,6 +1,5 @@
 import OpenAI from 'openai';
 import { parseIntentWithGemini } from './llm-gemini';
-import { parseIntent } from './intent';
 
 const openaiKey = import.meta.env.VITE_OPENAI_API_KEY;
 
@@ -11,58 +10,109 @@ const openai = new OpenAI({
 
 export type AIProvider = 'openai' | 'gemini' | 'regex';
 
+export type IntentType = 'send' | 'check_balance' | 'get_rate' | 'help' | 'unknown';
+
+export interface ParsedIntent {
+  intentType: IntentType;
+  amount: string | null;
+  currency: string | null;
+  recipient: string | null;
+  targetCurrency: string | null;
+}
+
 export interface ResilientIntentResult {
-  intent: {
-    amount: string;
-    currency: string;
-    recipient: string;
-  };
+  intent: ParsedIntent;
   provider: AIProvider;
+}
+
+// Simple regex-based fallback for common commands
+function parseIntentWithRegex(userInput: string): ParsedIntent | null {
+  const lower = userInput.toLowerCase();
+
+  // Send intent
+  const sendRegex = /send\s+([\d.]+)\s+(\w+)\s+to\s+(0x[a-fA-f0-9]{40})/i;
+  const sendMatch = userInput.match(sendRegex);
+  if (sendMatch) {
+    return {
+      intentType: 'send',
+      amount: sendMatch[1],
+      currency: sendMatch[2].toUpperCase(),
+      recipient: sendMatch[3],
+      targetCurrency: null,
+    };
+  }
+
+  // Balance check
+  if (lower.includes('balance') || lower.includes('how much') || lower.includes('my funds') || lower.includes('my wallet')) {
+    return { intentType: 'check_balance', amount: null, currency: null, recipient: null, targetCurrency: null };
+  }
+
+  // Exchange rate
+  const rateRegex = /rate\s+(?:for|of)?\s*([A-Z]{2,4})|([A-Z]{2,4})\s+rate|exchange.*([A-Z]{2,4})/i;
+  const rateMatch = userInput.match(rateRegex);
+  if (rateMatch || lower.includes('rate') || lower.includes('exchange') || lower.includes('convert')) {
+    const currencies = ['NGN', 'KES', 'GHS', 'GBP', 'EUR', 'USD'];
+    const foundCurrency = currencies.find(c => lower.includes(c.toLowerCase())) || null;
+    return { intentType: 'get_rate', amount: null, currency: null, recipient: null, targetCurrency: foundCurrency };
+  }
+
+  // Help
+  if (lower.includes('help') || lower.includes('what can you') || lower.includes('how do i') || lower.includes('capabilities')) {
+    return { intentType: 'help', amount: null, currency: null, recipient: null, targetCurrency: null };
+  }
+
+  return null;
 }
 
 export async function getResilientIntent(userInput: string): Promise<ResilientIntentResult> {
   // 1. Try OpenAI
   try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: [{
-        role: "user",
-        content: `Extract remittance intent from: "${userInput}". Return JSON with amount, currency (cUSD/USDC), and recipient (0x...).`
-      }],
-      temperature: 0,
-      response_format: { type: "json_object" }
-    });
+    if (openaiKey && openaiKey !== 'YOUR_OPENAI_KEY') {
+      const response = await openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: [{
+          role: "system",
+          content: `You are a remittance agent AI. Analyze user messages and return a JSON object with:
+- intentType: "send" | "check_balance" | "get_rate" | "help" | "unknown"
+- amount: string or null (for send)
+- currency: "USDC" | "cUSD" or null
+- recipient: "0x..." address or null (for send)
+- targetCurrency: fiat currency code or null (for get_rate)`
+        }, {
+          role: "user",
+          content: userInput
+        }],
+        temperature: 0,
+        response_format: { type: "json_object" }
+      });
 
-    const content = response.choices[0].message.content;
-    if (content) {
-      return {
-        intent: JSON.parse(content),
-        provider: 'openai'
-      };
+      const content = response.choices[0].message.content;
+      if (content) {
+        const parsed = JSON.parse(content) as ParsedIntent;
+        return { intent: parsed, provider: 'openai' };
+      }
     }
   } catch (e: any) {
     console.warn("OpenAI Failed:", e.message);
   }
 
-  // 2. Try Gemini Fallback
+  // 2. Try Gemini
   try {
     const intent = await parseIntentWithGemini(userInput);
-    return {
-      intent,
-      provider: 'gemini'
-    };
+    return { intent, provider: 'gemini' };
   } catch (e: any) {
     console.warn("Gemini Failed:", e.message);
   }
 
-  // 3. Final Fallback: Regex
-  const regexIntent = parseIntent(userInput);
+  // 3. Regex fallback
+  const regexIntent = parseIntentWithRegex(userInput);
   if (regexIntent) {
-    return {
-      intent: regexIntent,
-      provider: 'regex'
-    };
+    return { intent: regexIntent, provider: 'regex' };
   }
 
-  throw new Error("All AI providers and fallbacks failed to understand the intent.");
+  // 4. Default to unknown
+  return {
+    intent: { intentType: 'unknown', amount: null, currency: null, recipient: null, targetCurrency: null },
+    provider: 'regex'
+  };
 }
