@@ -9,8 +9,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAccount, useChainId, useWalletClient, usePublicClient } from 'wagmi';
 import { useAppKit } from '@reown/appkit/react';
 import { useAgent } from './hooks/useAgent';
-import { type TransactionHistory } from './lib/agent-core';
-import { registerAgentOnChain, formatAgentRegistry, ERC8004_REGISTRY } from './lib/erc8004';
+import { registerAgentOnChain, formatAgentRegistry, ERC8004_REGISTRY, ERC8004_ABI } from './lib/erc8004';
+import { type TransactionHistory, AGENT_TREASURY } from './lib/agent-core';
 
 interface Message {
     id: string;
@@ -56,7 +56,7 @@ const App: React.FC = () => {
     const [history, setHistory] = useState<TransactionHistory[]>([]);
     const [isLoadingHistory, setIsLoadingHistory] = useState(false);
     const [liveRate, setLiveRate] = useState<string>('...');
-    const [agentId, setAgentId] = useState<string | null>(() => localStorage.getItem('cria_agent_id'));
+    const [agentId, setAgentId] = useState<string | null>(() => localStorage.getItem('cria_agent_id') || '39');
     const [isRegistering, setIsRegistering] = useState(false);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -65,20 +65,48 @@ const App: React.FC = () => {
     useEffect(() => { document.documentElement.classList.toggle('dark', isDarkMode); }, [isDarkMode]);
 
     useEffect(() => {
-        fetch('https://api.frankfurter.app/latest?from=USD&to=NGN')
+        fetch('https://api.exchangerate-api.com/v4/latest/USD')
             .then(r => r.json())
             .then(d => { if (d.rates?.NGN) setLiveRate(`₦${Math.round(d.rates.NGN).toLocaleString()}`); })
             .catch(() => setLiveRate('₦1,600'));
     }, []);
 
     useEffect(() => {
-        if (view === 'dashboard' && isConnected && address && agent) {
+        if (publicClientRaw) {
+            // Fetch global agent identity from on-chain registry
+            const fetchGlobalAgentId = async () => {
+                try {
+                    const balance = await publicClientRaw.readContract({
+                        address: ERC8004_REGISTRY,
+                        abi: ERC8004_ABI,
+                        functionName: 'balanceOf',
+                        args: [AGENT_TREASURY as `0x${string}`],
+                    });
+                    if (balance > 0n) {
+                        const id = await publicClientRaw.readContract({
+                            address: ERC8004_REGISTRY,
+                            abi: ERC8004_ABI,
+                            functionName: 'tokenOfOwnerByIndex',
+                            args: [AGENT_TREASURY as `0x${string}`, 0n],
+                        });
+                        setAgentId(id.toString());
+                    }
+                } catch (e) {
+                    console.warn("Failed to fetch global agent ID:", e);
+                }
+            };
+            fetchGlobalAgentId();
+        }
+    }, [publicClientRaw]);
+
+    useEffect(() => {
+        if (view === 'dashboard' && agent) {
             setIsLoadingHistory(true);
-            agent.getTransactionHistory(address as `0x${string}`)
+            agent.getTransactionHistory(AGENT_TREASURY as `0x${string}`)
                 .then(setHistory).catch(console.error)
                 .finally(() => setIsLoadingHistory(false));
         }
-    }, [view, isConnected, address, agent]);
+    }, [view, agent]);
 
     const handleSend = async (customText?: string) => {
         const text = customText || input;
@@ -107,7 +135,7 @@ const App: React.FC = () => {
             if (result.replyText) {
                 setIsTyping(false);
                 setMessages(prev => prev.map(m => m.id === agentMsgId ? {
-                    ...m, text: result.replyText!, status: 'info', provider: result.provider
+                    ...m, text: result.replyText!, status: result.hash ? 'success' : 'info', provider: result.provider, hash: result.hash
                 } : m));
                 return;
             }
@@ -472,9 +500,9 @@ const App: React.FC = () => {
                                 {isConnected ? (
                                     <div className="space-y-0">
                                         {[
-                                            { label: 'Wallet', value: address ? `${address.slice(0, 10)}...${address.slice(-6)}` : '—' },
-                                            { label: 'Agent ID', value: agentId ? `#${agentId}` : 'Not registered', valueClass: agentId ? 'text-celo-green font-black text-lg' : `${dark ? 'text-white/30' : 'text-gray-400'} italic text-sm` },
-                                            { label: 'Rank', value: rank.label, valueClass: `${rank.color} font-black tracking-wider` },
+                                            { label: 'Agent Wallet', value: `${AGENT_TREASURY.slice(0, 10)}...${AGENT_TREASURY.slice(-6)}` },
+                                            { label: 'Agent ID', value: agentId ? `#${agentId}` : 'Registered', valueClass: 'text-celo-green font-black text-lg' },
+                                            { label: 'Status', value: 'ACTIVE', valueClass: 'text-celo-green font-black tracking-wider' },
                                         ].map((row, i) => (
                                             <div key={i} className={`flex justify-between items-center py-3 ${i < 2 ? `border-b ${dark ? 'border-white/6' : 'border-gray-100'}` : ''}`}>
                                                 <span className={`text-[9px] font-black uppercase tracking-[0.18em] ${dark ? 'text-white/35' : 'text-gray-400'}`}>{row.label}</span>
@@ -483,21 +511,10 @@ const App: React.FC = () => {
                                         ))}
 
                                         <div className="pt-4">
-                                            {!agentId ? (
-                                                <motion.button
-                                                    whileTap={{ scale: 0.97 }}
-                                                    onClick={handleRegisterAgent}
-                                                    disabled={isRegistering}
-                                                    className="btn-primary w-full py-3.5 text-[12px] tracking-widest uppercase flex items-center justify-center gap-2"
-                                                >
-                                                    {isRegistering ? <><Loader2 size={14} className="animate-spin" /> Registering...</> : <><ShieldCheck size={14} /> Register Agent (ERC-8004)</>}
-                                                </motion.button>
-                                            ) : (
-                                                <div className={`flex items-center gap-2 text-[12px] font-semibold ${dark ? 'text-white/40' : 'text-gray-400'}`}>
-                                                    <CheckCircle2 size={14} className="text-celo-green" />
-                                                    Registered · discoverable on Celo
-                                                </div>
-                                            )}
+                                            <div className={`flex items-center gap-2 text-[12px] font-semibold ${dark ? 'text-white/40' : 'text-gray-400'}`}>
+                                                <CheckCircle2 size={14} className="text-celo-green" />
+                                                Verified Identity · Discoverable on Celo
+                                            </div>
                                         </div>
                                     </div>
                                 ) : (

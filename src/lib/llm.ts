@@ -5,6 +5,7 @@ const openaiKey = import.meta.env.VITE_OPENAI_API_KEY;
 
 const openai = new OpenAI({
   apiKey: openaiKey,
+  baseURL: window.location.origin + '/v1/openai',
   dangerouslyAllowBrowser: true,
 });
 

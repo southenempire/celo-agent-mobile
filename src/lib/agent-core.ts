@@ -10,7 +10,7 @@ import { getResilientIntent, type AIProvider, type ParsedIntent } from './llm';
 import { generateAgentIdentity } from './erc8004';
 
 // Agent Treasury for service fees (x402-style)
-const AGENT_TREASURY = '0x3D02DEF96FC41a74c7e6b939Bb17aF0dA3D66b3c';
+export const AGENT_TREASURY = '0x3D02DEF96FC41a74c7e6b939Bb17aF0dA3D66b3c';
 const SERVICE_FEE = '0.01';
 
 export interface AgentResult {
@@ -68,8 +68,8 @@ export class CeloAgent {
 
     async getExchangeRate(targetCurrency: string): Promise<{ currency: string; rate: string; formatted: string }> {
         try {
-            // Using frankfurter.app — free, no API key needed
-            const res = await fetch(`https://api.frankfurter.app/latest?from=USD&to=${targetCurrency}`);
+            // Using exchangerate-api — free tier supports NGN
+            const res = await fetch(`https://api.exchangerate-api.com/v4/latest/USD`);
             if (!res.ok) throw new Error('Rate API failed');
             const data = await res.json();
             const rate = data.rates[targetCurrency];
@@ -151,14 +151,32 @@ export class CeloAgent {
             throw new Error("I need an amount and a recipient address. Try: 'Send 5 USDC to 0x...'");
         }
 
-        const currency = intent.currency || 'USDC';
+        let amount = intent.amount;
+        let currency = intent.currency || 'USDC';
+        let conversionMsg = '';
+
+        // Check if intent currency is a fiat currency we support for conversion
+        const fiatCurrencies = ['NGN', 'KES', 'GHS', 'GBP', 'EUR'];
+        if (fiatCurrencies.includes(currency)) {
+            const fiatSymbol = currency;
+            const rateData = await this.getExchangeRate(fiatSymbol);
+            const rate = parseFloat(rateData.rate);
+            
+            // Convert fiat to USD (USDC/cUSD are pegged)
+            const convertedAmount = (parseFloat(amount) / rate).toFixed(2);
+            conversionMsg = `Converted ${amount} ${fiatSymbol} to ${convertedAmount} USDC (Rate: ${rateData.formatted})\n`;
+            
+            amount = convertedAmount;
+            currency = 'USDC'; // Default to USDC for fiat conversions
+        }
+
         const tokenAddress = (STABLECOINS as any)[currency] as `0x${string}`;
         if (!tokenAddress) {
             throw new Error(`Unsupported currency: ${currency}. I support cUSD and USDC.`);
         }
 
         const decimals = DECIMALS[currency] || 18;
-        const amountInUnits = parseUnits(intent.amount, decimals);
+        const amountInUnits = parseUnits(amount, decimals);
         const feeInUnits = parseUnits(SERVICE_FEE, decimals);
 
         // Check balance
@@ -170,7 +188,7 @@ export class CeloAgent {
         });
 
         if (balance < (amountInUnits + feeInUnits)) {
-            throw new Error(`Insufficient balance. You need ${intent.amount} ${currency} + ${SERVICE_FEE} ${currency} service fee.`);
+            throw new Error(`${conversionMsg}Insufficient balance. You need ${amount} ${currency} + ${SERVICE_FEE} ${currency} service fee.`);
         }
 
         // Execute primary transfer
@@ -201,9 +219,10 @@ export class CeloAgent {
         return {
             hash,
             explorerUrl: `https://sepolia.celoscan.io/tx/${hash}`,
-            intent,
+            intent: { ...intent, amount, currency }, // Return converted intent
             provider,
             feeHash,
+            replyText: conversionMsg ? `✅ ${conversionMsg}Sent!` : undefined
         };
     }
 
