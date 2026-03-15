@@ -3,6 +3,20 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+    server: {
+        proxy: {
+            '/v1/openai': {
+                target: 'https://api.openai.com',
+                changeOrigin: true,
+                rewrite: (path) => path.replace(/^\/v1\/openai/, '/v1')
+            },
+            '/v1/gemini': {
+                target: 'https://generativelanguage.googleapis.com',
+                changeOrigin: true,
+                rewrite: (path) => path.replace(/^\/v1\/gemini/, '/v1')
+            }
+        }
+    },
     plugins: [
         react(),
         VitePWA({
