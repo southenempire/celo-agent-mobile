@@ -552,43 +552,6 @@ const App: React.FC = () => {
                             </div>
                         </div>
 
-
-                        {/* Submission Card */}
-                        <div className={`rounded-[26px] p-5 border ${dark ? 'bg-celo-green/5 border-celo-green/15' : 'bg-emerald-50 border-emerald-200'} backdrop-blur-xl`}>
-                            <div className="flex items-center gap-2 mb-4">
-                                <ShieldCheck size={16} className="text-celo-green" />
-                                <span className={`text-[10px] font-black uppercase tracking-[0.18em] ${dark ? 'text-white/40' : 'text-gray-400'}`}>Karma Gap Submission</span>
-                            </div>
-                            <div className="space-y-2.5">
-                                {[
-                                    { label: 'Agent ID', value: agentId ? `#${agentId}` : 'Not registered' },
-                                    { label: 'Registry', value: AGENT_REGISTRY },
-                                    { label: 'App URL', value: APP_URL },
-                                ].map(({ label, value }) => (
-                                    <div key={label} className={`flex items-center justify-between gap-2 p-3 rounded-[14px] ${dark ? 'bg-white/5 border border-white/8' : 'bg-white/80 border border-gray-100'}`}>
-                                        <div className="min-w-0">
-                                            <p className={`text-[9px] font-black uppercase tracking-[0.15em] mb-0.5 ${dark ? 'text-white/30' : 'text-gray-400'}`}>{label}</p>
-                                            <p className={`text-[11px] font-semibold truncate ${dark ? 'text-white/80' : 'text-gray-700'}`}>{value}</p>
-                                        </div>
-                                        <button
-                                            onClick={() => copyToClipboard(value, label)}
-                                            className={`flex-shrink-0 p-1.5 rounded-lg transition-all ${
-                                                copiedField === label
-                                                    ? 'bg-celo-green/20 text-celo-green'
-                                                    : dark ? 'text-white/25 hover:text-white/60 hover:bg-white/8' : 'text-gray-300 hover:text-gray-600 hover:bg-gray-100'
-                                            }`}
-                                        >
-                                            {copiedField === label ? <CheckCircle2 size={13} /> : <Copy size={13} />}
-                                        </button>
-                                    </div>
-                                ))}
-                            </div>
-                            <a href="https://gap.karma.global" target="_blank" rel="noopener noreferrer"
-                                className="mt-4 flex items-center justify-center gap-2 text-[11px] font-black text-celo-green bg-celo-green/10 border border-celo-green/25 px-4 py-3 rounded-[14px] hover:bg-celo-green/20 transition-all w-full tracking-widest uppercase">
-                                <ExternalLink size={11} /> Submit on Karma Gap
-                            </a>
-                        </div>
-
                         {/* Transmission Log */}
                         <div className={`rounded-[26px] p-5 border ${dark ? 'bg-white/3 border-white/6' : 'bg-white/70 border-white/70'} backdrop-blur-xl`}>
                             <div className="flex justify-between items-center mb-4">
