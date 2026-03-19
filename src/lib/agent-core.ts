@@ -5,7 +5,7 @@ import {
     formatUnits,
     erc20Abi
 } from 'viem';
-import { STABLECOINS, DECIMALS, testnet } from './celo';
+import { STABLECOINS_BY_CHAIN, DECIMALS, testnet } from './celo';
 import { getResilientIntent, type AIProvider, type ParsedIntent } from './llm';
 import { generateAgentIdentity } from './erc8004';
 import { generateConversationalReply } from './llm-gemini';
@@ -41,20 +41,26 @@ export class CeloAgent {
         private publicClient: PublicClient
     ) { }
 
+    private get stablecoins() {
+        const chainId = this.publicClient.chain?.id ?? 44787;
+        return STABLECOINS_BY_CHAIN[chainId] ?? STABLECOINS_BY_CHAIN[44787];
+    }
+
     getIdentity() {
         return generateAgentIdentity(this.walletClient.account?.address || '0x...');
     }
 
     async checkBalance(address: `0x${string}`): Promise<{ cUSD: string; USDC: string }> {
+        const stablecoins = this.stablecoins;
         const [cUSDBalance, USDCBalance] = await Promise.all([
             this.publicClient.readContract({
-                address: STABLECOINS.cUSD as `0x${string}`,
+                address: stablecoins.cUSD as `0x${string}`,
                 abi: erc20Abi,
                 functionName: 'balanceOf',
                 args: [address],
             }),
             this.publicClient.readContract({
-                address: STABLECOINS.USDC as `0x${string}`,
+                address: stablecoins.USDC as `0x${string}`,
                 abi: erc20Abi,
                 functionName: 'balanceOf',
                 args: [address],
@@ -158,6 +164,7 @@ export class CeloAgent {
         let amount = intent.amount;
         let currency = intent.currency || 'USDC';
         let conversionMsg = '';
+        const stablecoins = this.stablecoins;
 
         // Check if intent currency is a fiat currency we support for conversion
         const fiatCurrencies = ['NGN', 'KES', 'GHS', 'GBP', 'EUR'];
@@ -174,7 +181,7 @@ export class CeloAgent {
             currency = 'USDC'; // Default to USDC for fiat conversions
         }
 
-        const tokenAddress = (STABLECOINS as any)[currency] as `0x${string}`;
+        const tokenAddress = (stablecoins as any)[currency] as `0x${string}`;
         if (!tokenAddress) {
             throw new Error(`Unsupported currency: ${currency}. I support cUSD and USDC.`);
         }
@@ -232,11 +239,10 @@ export class CeloAgent {
 
     async getTransactionHistory(address: `0x${string}`): Promise<TransactionHistory[]> {
         try {
-            // Look back ~50,000 blocks (~7 days on Celo Sepolia with ~1s block times)
             const currentBlock = await this.publicClient.getBlockNumber();
             const fromBlock = currentBlock > BigInt(50000) ? currentBlock - BigInt(50000) : BigInt(0);
-
-            const tokenAddresses = [STABLECOINS.cUSD as `0x${string}`, STABLECOINS.USDC as `0x${string}`];
+            const stablecoins = this.stablecoins;
+            const tokenAddresses = [stablecoins.cUSD as `0x${string}`, stablecoins.USDC as `0x${string}`];
 
             const [sentLogs, receivedLogs] = await Promise.all([
                 this.publicClient.getLogs({
@@ -274,7 +280,8 @@ export class CeloAgent {
             ]);
 
             const mapLog = (log: any, status: 'sent' | 'received'): TransactionHistory => {
-                const currency = log.address.toLowerCase() === STABLECOINS.cUSD.toLowerCase() ? 'cUSD' : 'USDC';
+                const stablecoins = this.stablecoins;
+                const currency = log.address.toLowerCase() === stablecoins.cUSD.toLowerCase() ? 'cUSD' : 'USDC';
                 const decimals = DECIMALS[currency] || 18;
                 const amount = (Number(log.args.value) / Math.pow(10, decimals)).toFixed(4);
                 return {

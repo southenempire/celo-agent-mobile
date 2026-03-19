@@ -61,7 +61,7 @@ const App: React.FC = () => {
     const [history, setHistory] = useState<TransactionHistory[]>([]);
     const [isLoadingHistory, setIsLoadingHistory] = useState(false);
     const [liveRate, setLiveRate] = useState<string>('...');
-    const [agentId, setAgentId] = useState<string | null>(() => localStorage.getItem('cria_agent_id') || '2335');
+    const [agentId, setAgentId] = useState<string | null>(null);
     const [isRegistering, setIsRegistering] = useState(false);
     const [isSendingDemo, setIsSendingDemo] = useState(false);
     const [copiedField, setCopiedField] = useState<string | null>(null);
