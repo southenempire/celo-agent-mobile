@@ -208,7 +208,6 @@ export class CeloAgent {
             abi: erc20Abi,
             functionName: 'transfer',
             args: [intent.recipient as `0x${string}`, amountInUnits],
-            chain: testnet,
             account: this.walletClient.account!,
         } as any);
 
@@ -220,7 +219,6 @@ export class CeloAgent {
                 abi: erc20Abi,
                 functionName: 'transfer',
                 args: [AGENT_TREASURY as `0x${string}`, feeInUnits],
-                chain: testnet,
                 account: this.walletClient.account!,
             } as any);
         } catch (e) {
