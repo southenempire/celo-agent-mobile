@@ -552,31 +552,6 @@ const App: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* Agentscan Card */}
-                        <div className={`rounded-[26px] p-5 border ${dark ? 'bg-white/3 border-white/6' : 'bg-white/70 border-white/70'} backdrop-blur-xl`}>
-                            <div className="flex justify-between items-center mb-4">
-                                <div className="flex items-center gap-2">
-                                    <Trophy size={16} className="text-celo-gold" />
-                                    <span className={`text-[10px] font-black uppercase tracking-[0.18em] ${dark ? 'text-white/40' : 'text-gray-400'}`}>Agentscan Rank</span>
-                                </div>
-                                <a href={AGENTSCAN_URL} target="_blank" rel="noopener noreferrer"
-                                    className="flex items-center gap-1.5 text-[10px] font-black text-celo-green bg-celo-green/10 border border-celo-green/25 px-3 py-1.5 rounded-full hover:bg-celo-green/20 transition-all">
-                                    <ExternalLink size={10} /> View on Agentscan
-                                </a>
-                            </div>
-                            <p className={`text-[12px] mb-4 ${dark ? 'text-white/50' : 'text-gray-500'}`}>
-                                Rank on Agentscan is based on on-chain agent activity. Generate a transaction to boost your rank.
-                            </p>
-                            <motion.button
-                                whileTap={{ scale: 0.96 }}
-                                onClick={handleDemoTx}
-                                disabled={!isConnected || isSendingDemo}
-                                className="btn-primary w-full py-3 text-[12px] tracking-widest uppercase flex items-center justify-center gap-2 disabled:opacity-40"
-                            >
-                                {isSendingDemo ? <Loader2 size={14} className="animate-spin" /> : <Flame size={14} />}
-                                {isSendingDemo ? 'Sending...' : 'Send Demo Transaction'}
-                            </motion.button>
-                        </div>
 
                         {/* Submission Card */}
                         <div className={`rounded-[26px] p-5 border ${dark ? 'bg-celo-green/5 border-celo-green/15' : 'bg-emerald-50 border-emerald-200'} backdrop-blur-xl`}>
