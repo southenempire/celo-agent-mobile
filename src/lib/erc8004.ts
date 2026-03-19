@@ -12,9 +12,13 @@
 import type { WalletClient, PublicClient } from 'viem';
 import { celoSepolia } from 'viem/chains';
 
-// ERC-8004 Identity Registry on Celo Sepolia (ERC-721 based)
-export const ERC8004_REGISTRY = '0x8004A818BFB912233c491871b3d84c89A494BD9e' as const;
-export const CHAIN_ID = celoSepolia.id; // 44787 (Celo Sepolia - but we're using 11155111 per code)
+// ERC-8004 Identity Registry
+export const ERC8004_REGISTRY_MAINNET = '0x8004A169FB4a3325136EB29fA0ceB6D2e539a432' as const;
+export const ERC8004_REGISTRY_SEPOLIA = '0x8004A818BFB912233c491871b3d84c89A494BD9e' as const;
+
+// Default registry (Sepolia for dev, but we'll use a dynamic one in App.tsx)
+export const ERC8004_REGISTRY = ERC8004_REGISTRY_SEPOLIA;
+export const CHAIN_ID = celoSepolia.id; 
 
 export const ERC8004_ABI = [
   {
@@ -181,5 +185,6 @@ export async function registerAgentOnChain(
  * Format: eip155:{chainId}:{registryAddress}
  */
 export function formatAgentRegistry(chainId: number): string {
-  return `eip155:${chainId}:${ERC8004_REGISTRY}`;
+  const registry = chainId === 42220 ? ERC8004_REGISTRY_MAINNET : ERC8004_REGISTRY_SEPOLIA;
+  return `eip155:${chainId}:${registry}`;
 }

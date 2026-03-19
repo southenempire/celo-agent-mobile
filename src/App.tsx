@@ -3,13 +3,14 @@ import {
     Send, Wallet, Loader2, Link as LinkIcon,
     LayoutDashboard, MessageSquare, ArrowUpRight, ArrowDownLeft,
     Coins, BarChart3, ChevronRight, Sun, Moon, Info,
-    ShieldCheck, Zap, CheckCircle2, Clock, Globe, RefreshCw, Bot, Sparkles
+    ShieldCheck, Zap, CheckCircle2, Clock, Globe, RefreshCw, Bot, Sparkles,
+    Copy, ExternalLink, Trophy, Flame
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAccount, useChainId, useWalletClient, usePublicClient } from 'wagmi';
 import { useAppKit } from '@reown/appkit/react';
 import { useAgent } from './hooks/useAgent';
-import { registerAgentOnChain, formatAgentRegistry, ERC8004_REGISTRY, ERC8004_ABI } from './lib/erc8004';
+import { registerAgentOnChain, formatAgentRegistry, ERC8004_REGISTRY_MAINNET, ERC8004_REGISTRY_SEPOLIA, ERC8004_ABI } from './lib/erc8004';
 import { type TransactionHistory, AGENT_TREASURY } from './lib/agent-core';
 
 interface Message {
@@ -22,7 +23,9 @@ interface Message {
 }
 
 const QUICK_ACTIONS = [
-    { label: '💸 Send', prompt: 'Send 0.05 USDC to ', fillOnly: true },
+    { label: '💸 Send USDC', prompt: 'Send 0.05 USDC to ', fillOnly: true },
+    { label: '₦ Send NGN', prompt: 'Send 5000 NGN to ', fillOnly: true },
+    { label: 'KES Send', prompt: 'Send 500 KES to ', fillOnly: true },
     { label: '💰 Balance', prompt: 'What is my current balance?', fillOnly: false },
     { label: '📈 NGN Rate', prompt: 'What is the NGN exchange rate?', fillOnly: false },
     { label: '🌍 KES Rate', prompt: 'What is the KES exchange rate?', fillOnly: false },
@@ -37,8 +40,10 @@ const App: React.FC = () => {
     const { data: walletClientRaw } = useWalletClient();
     const publicClientRaw = usePublicClient();
     const isTestnet = chainId === 11155111 || chainId === 44787;
+    const isCeloMainnet = chainId === 42220;
+    const currentRegistry = isCeloMainnet ? ERC8004_REGISTRY_MAINNET : ERC8004_REGISTRY_SEPOLIA;
     const explorerUrl = isTestnet ? 'https://sepolia.celoscan.io' : 'https://celoscan.io';
-    const networkName = isTestnet ? 'Celo Sepolia' : 'Celo';
+    const networkName = isCeloMainnet ? 'Celo Mainnet ✓' : isTestnet ? 'Celo Sepolia' : 'Unknown Net';
 
     const { open } = useAppKit();
     const agent = useAgent();
@@ -56,8 +61,30 @@ const App: React.FC = () => {
     const [history, setHistory] = useState<TransactionHistory[]>([]);
     const [isLoadingHistory, setIsLoadingHistory] = useState(false);
     const [liveRate, setLiveRate] = useState<string>('...');
-    const [agentId, setAgentId] = useState<string | null>(() => localStorage.getItem('cria_agent_id') || '39');
+    const [agentId, setAgentId] = useState<string | null>(() => localStorage.getItem('cria_agent_id') || '2335');
     const [isRegistering, setIsRegistering] = useState(false);
+    const [isSendingDemo, setIsSendingDemo] = useState(false);
+    const [copiedField, setCopiedField] = useState<string | null>(null);
+
+    const copyToClipboard = useCallback((text: string, field: string) => {
+        navigator.clipboard.writeText(text).then(() => {
+            setCopiedField(field);
+            setTimeout(() => setCopiedField(null), 2000);
+        });
+    }, []);
+
+    const AGENT_REGISTRY = `eip155:${chainId}:${currentRegistry}`;
+    const AGENTSCAN_URL = `https://www.agentscan.io/agents/${chainId}/${currentRegistry}`;
+    const APP_URL = 'https://celo-agent-mobile.vercel.app';
+
+    const handleDemoTx = async () => {
+        if (!agent || isSendingDemo) return;
+        setIsSendingDemo(true);
+        const demoPrompt = 'Send 0.01 USDC to 0xF622F2b62bd76D9D7e66f5085e2f9f30fA36748A';
+        setView('chat');
+        await handleSend(demoPrompt);
+        setIsSendingDemo(false);
+    };
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -73,31 +100,31 @@ const App: React.FC = () => {
 
     useEffect(() => {
         if (publicClientRaw) {
-            // Fetch global agent identity from on-chain registry
             const fetchGlobalAgentId = async () => {
                 try {
                     const balance = await publicClientRaw.readContract({
-                        address: ERC8004_REGISTRY,
+                        address: currentRegistry,
                         abi: ERC8004_ABI,
                         functionName: 'balanceOf',
                         args: [AGENT_TREASURY as `0x${string}`],
                     });
                     if (balance > 0n) {
-                        const id = await publicClientRaw.readContract({
-                            address: ERC8004_REGISTRY,
-                            abi: ERC8004_ABI,
-                            functionName: 'tokenOfOwnerByIndex',
-                            args: [AGENT_TREASURY as `0x${string}`, 0n],
-                        });
-                        setAgentId(id.toString());
+                        // tokenOfOwnerByIndex is not supported on these registries —
+                        // use known agent IDs from deployment transactions
+                        const knownIds: Record<number, string> = {
+                            42220: '2335',  // Celo Mainnet  — tx 0x4cd0ccf...
+                            44787: '39',    // Celo Sepolia  — previously registered
+                        };
+                        const known = knownIds[chainId];
+                        if (known) setAgentId(known);
                     }
                 } catch (e) {
-                    console.warn("Failed to fetch global agent ID:", e);
+                    console.warn("Failed to fetch agent ID:", e);
                 }
             };
             fetchGlobalAgentId();
         }
-    }, [publicClientRaw]);
+    }, [publicClientRaw, currentRegistry, chainId]);
 
     useEffect(() => {
         if (view === 'dashboard' && agent) {
@@ -523,6 +550,68 @@ const App: React.FC = () => {
                                     </button>
                                 )}
                             </div>
+                        </div>
+
+                        {/* Agentscan Card */}
+                        <div className={`rounded-[26px] p-5 border ${dark ? 'bg-white/3 border-white/6' : 'bg-white/70 border-white/70'} backdrop-blur-xl`}>
+                            <div className="flex justify-between items-center mb-4">
+                                <div className="flex items-center gap-2">
+                                    <Trophy size={16} className="text-celo-gold" />
+                                    <span className={`text-[10px] font-black uppercase tracking-[0.18em] ${dark ? 'text-white/40' : 'text-gray-400'}`}>Agentscan Rank</span>
+                                </div>
+                                <a href={AGENTSCAN_URL} target="_blank" rel="noopener noreferrer"
+                                    className="flex items-center gap-1.5 text-[10px] font-black text-celo-green bg-celo-green/10 border border-celo-green/25 px-3 py-1.5 rounded-full hover:bg-celo-green/20 transition-all">
+                                    <ExternalLink size={10} /> View on Agentscan
+                                </a>
+                            </div>
+                            <p className={`text-[12px] mb-4 ${dark ? 'text-white/50' : 'text-gray-500'}`}>
+                                Rank on Agentscan is based on on-chain agent activity. Generate a transaction to boost your rank.
+                            </p>
+                            <motion.button
+                                whileTap={{ scale: 0.96 }}
+                                onClick={handleDemoTx}
+                                disabled={!isConnected || isSendingDemo}
+                                className="btn-primary w-full py-3 text-[12px] tracking-widest uppercase flex items-center justify-center gap-2 disabled:opacity-40"
+                            >
+                                {isSendingDemo ? <Loader2 size={14} className="animate-spin" /> : <Flame size={14} />}
+                                {isSendingDemo ? 'Sending...' : 'Send Demo Transaction'}
+                            </motion.button>
+                        </div>
+
+                        {/* Submission Card */}
+                        <div className={`rounded-[26px] p-5 border ${dark ? 'bg-celo-green/5 border-celo-green/15' : 'bg-emerald-50 border-emerald-200'} backdrop-blur-xl`}>
+                            <div className="flex items-center gap-2 mb-4">
+                                <ShieldCheck size={16} className="text-celo-green" />
+                                <span className={`text-[10px] font-black uppercase tracking-[0.18em] ${dark ? 'text-white/40' : 'text-gray-400'}`}>Karma Gap Submission</span>
+                            </div>
+                            <div className="space-y-2.5">
+                                {[
+                                    { label: 'Agent ID', value: agentId ? `#${agentId}` : 'Not registered' },
+                                    { label: 'Registry', value: AGENT_REGISTRY },
+                                    { label: 'App URL', value: APP_URL },
+                                ].map(({ label, value }) => (
+                                    <div key={label} className={`flex items-center justify-between gap-2 p-3 rounded-[14px] ${dark ? 'bg-white/5 border border-white/8' : 'bg-white/80 border border-gray-100'}`}>
+                                        <div className="min-w-0">
+                                            <p className={`text-[9px] font-black uppercase tracking-[0.15em] mb-0.5 ${dark ? 'text-white/30' : 'text-gray-400'}`}>{label}</p>
+                                            <p className={`text-[11px] font-semibold truncate ${dark ? 'text-white/80' : 'text-gray-700'}`}>{value}</p>
+                                        </div>
+                                        <button
+                                            onClick={() => copyToClipboard(value, label)}
+                                            className={`flex-shrink-0 p-1.5 rounded-lg transition-all ${
+                                                copiedField === label
+                                                    ? 'bg-celo-green/20 text-celo-green'
+                                                    : dark ? 'text-white/25 hover:text-white/60 hover:bg-white/8' : 'text-gray-300 hover:text-gray-600 hover:bg-gray-100'
+                                            }`}
+                                        >
+                                            {copiedField === label ? <CheckCircle2 size={13} /> : <Copy size={13} />}
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                            <a href="https://gap.karma.global" target="_blank" rel="noopener noreferrer"
+                                className="mt-4 flex items-center justify-center gap-2 text-[11px] font-black text-celo-green bg-celo-green/10 border border-celo-green/25 px-4 py-3 rounded-[14px] hover:bg-celo-green/20 transition-all w-full tracking-widest uppercase">
+                                <ExternalLink size={11} /> Submit on Karma Gap
+                            </a>
                         </div>
 
                         {/* Transmission Log */}

@@ -8,6 +8,7 @@ import {
 import { STABLECOINS, DECIMALS, testnet } from './celo';
 import { getResilientIntent, type AIProvider, type ParsedIntent } from './llm';
 import { generateAgentIdentity } from './erc8004';
+import { generateConversationalReply } from './llm-gemini';
 
 // Agent Treasury for service fees (x402-style)
 export const AGENT_TREASURY = '0x3D02DEF96FC41a74c7e6b939Bb17aF0dA3D66b3c';
@@ -113,12 +114,15 @@ export class CeloAgent {
             case 'send':
                 return this.handleSend(intent, provider);
 
-            default:
-                return {
-                    intent,
-                    provider,
-                    replyText: `I didn't quite catch that. Try:\n• "Send 5 USDC to 0x..."\n• "What's my USDC balance?"\n• "What's the NGN exchange rate?"`,
-                };
+            default: {
+                let replyText = `I didn't quite catch that. Try:\n• "Send 5 USDC to 0x..."\n• "What's my USDC balance?"\n• "What's the NGN exchange rate?"`;
+                try {
+                    replyText = await generateConversationalReply(input);
+                } catch {
+                    // keep the static fallback
+                }
+                return { intent, provider, replyText };
+            }
         }
     }
 
