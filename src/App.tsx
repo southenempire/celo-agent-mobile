@@ -556,6 +556,22 @@ const App: React.FC = () => {
                                     disabled={isTyping}
                                 />
                                 <button
+                                    onClick={startSpeechRecognition}
+                                    disabled={isTyping}
+                                    className={`p-3 rounded-2xl transition-all shadow-md ${
+                                        isListening ? 'bg-red-500 text-white' : 'bg-white/5 border border-white/10 text-white/40 hover:text-white/80'
+                                    }`}
+                                >
+                                    {isListening ? (
+                                        <div className="relative">
+                                            <MicOff size={20} />
+                                            <span className="absolute -inset-1 rounded-full border-2 border-white/20 animate-ping" />
+                                        </div>
+                                    ) : (
+                                        <Mic size={20} />
+                                    )}
+                                </button>
+                                <button
                                     onClick={() => handleSend()}
                                     disabled={!input.trim() || isTyping}
                                     className="bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed text-black p-3 rounded-2xl transition-all shadow-lg shadow-yellow-500/20"
@@ -688,27 +704,6 @@ const App: React.FC = () => {
                     </motion.div>
                 )}
             </AnimatePresence>
-            {/* Floating Voice UI Button */}
-            <motion.button
-                initial={{ scale: 0, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.9 }}
-                onClick={startSpeechRecognition}
-                disabled={isTyping}
-                className={`fixed bottom-24 right-6 z-50 p-4 rounded-full shadow-2xl shadow-celo-green/30 flex items-center justify-center transition-all ${
-                    isListening ? 'bg-red-500 text-white' : 'bg-celo-green text-white'
-                }`}
-            >
-                {isListening ? (
-                    <div className="relative">
-                        <MicOff size={24} />
-                        <span className="absolute -inset-1 rounded-full border-2 border-white/20 animate-ping" />
-                    </div>
-                ) : (
-                    <Mic size={24} />
-                )}
-            </motion.button>
 
             {/* Tour Overlay */}
             <AnimatePresence>
