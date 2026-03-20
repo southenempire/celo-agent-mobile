@@ -1,59 +1,69 @@
-# CRIA Pro — Celo Remittance Intent Agent
+# CRIA: The Intelligent Remittance Agent 🤖💸🌳
 
-CRIA (Celo Remittance Intent Agent) is an autonomous, intelligent agent designed to simplify and accelerate cross-border remittances on the Celo blockchain. By combining natural language processing with Celo's fast settlement and stablecoin-native infrastructure, CRIA provides a "human-to-agent" interface for moving money globally.
+**CRIA (Celo Remittance Intent Agent)** is a production-grade, mobile-first financial assistant designed to make global payments as simple as sending a text. By leveraging the Celo network's speed, low fees, and mobile-first infrastructure, CRIA bridges the gap between digital assets and real-world utility for the "next billion" users.
 
-## 🚀 Vision
-Remittances today are slow, expensive, and technically intimidating for most users. CRIA removes these barriers by allowing users to interact with their funds using plain language, while the agent handles the underlying blockchain complexities, exchange rates, and ERC-8004 identity verification.
+---
 
-## ✨ Key Features (Hackathon Upgrades)
-- **Natural Language Payments**: "Send 10 USDC to Mom" — CRIA now resolves names from your local memory.
-- **Address Book (AgentVault-lite)**: "Remember 0x... as Mom" or "Save this address to my contacts as Sister."
-- **Fee Comparison Engine**: Real-time savings analysis vs. Western Union ($12.40 saved!).
-- **"Native" Fiat Support**: Automatic conversion from fiat amounts (NGN, KES, GHS, GBP, EUR) to USDC/cUSD using live exchange rates.
-- **ERC-8004 Agent Identity**: Trustless registration and identity verification on the Celo blockchain.
-- **Hybrid Intent Architecture**: High-accuracy LLM-based intent parsing with redundant fallbacks.
-- **Micro-Fee Abstraction (x402-style)**: Modular service fee collection built into the agent's core protocol.
-- **~5 Second Settlement**: Leveraging Celo's ultra-fast block times for near-instant global transfers.
+## 🌟 Core Value Proposition
 
-## 🛠 Technical Stack
-- **Blockchain**: Celo L2 (Stablecoins & Low Fees)
-- **Identity Standard**: ERC-8004 (Trustless Agents Standard)
-- **LLM Integration**: OpenAI (GPT-3.5) & Google Gemini (1.5 Flash)
-- **Communication Protocol**: Intent-based financial operations
-- **Frontend**: React, Vite, Tailwind CSS, Framer Motion
-- **Wallet Integration**: Reown AppKit & Wagmi
+CRIA solves the "last mile" problem of remittances by providing a natural language interface for complex blockchain operations.
 
-## 📋 Hackathon Evaluation
-CRIA was built for the **Celo: Build Agents for the Real World V2 Hackathon**. It aligns with all core judging criteria:
-- **Technological Implementation**: Full on-chain ERC-8004 lifecycle.
-- **Real-World Utility**: Directly targets the $800B+ remittance market.
-- **Agent Intelligence**: Autonomous reasoning and tool-agnostic intent parsing.
+- **🚀 Instant Out-ramps**: Send funds directly to bank accounts in Nigeria (NGN), Kenya (KES), and Ghana (GHS). CRIA automatically detects account numbers and guides you through the process.
+- **💰 Embedded Savings**: Every transaction compares itself against traditional providers (like Western Union), showing users exactly how much they save in real-time.
+- **🎙️ Voice-First Banking**: Full integration with the Web Speech API allows for hands-free financial management—just tap the mic and say "Send 5000 Naira to Mom".
+- **📖 AgentVault (Memory)**: CRIA remembers your frequent contacts and resolves names like "Sister" or "Dad" to blockchain addresses instantly.
 
-## 📦 Getting Started
+---
 
-### Prerequisites
-- Node.js & npm
-- A Celo-compatible wallet (e.g., MetaMask, Valora)
+## 🛠 Technical Architecture
 
-### Installation
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/[your-repo]/celo-agent-mobile
-   ```
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Create a `.env` file with your API keys:
-   ```env
-   VITE_OPENAI_API_KEY=your_openai_key
-   VITE_GEMINI_API_KEY=your_gemini_key
-   VITE_PROJECT_ID=your_reown_project_id
-   ```
-4. Start the development server:
-   ```bash
-   npm run dev
-   ```
+CRIA is built on a modular, resilient architecture designed for high availability and user safety.
 
-## 📜 License
-MIT
+```mermaid
+graph TD
+    User((User)) -->|Voice/Text| UI[React PWA]
+    UI -->|Natural Language| AgentCore[CeloAgent Core]
+    AgentCore -->|Intent Analysis| LLM[Gemini Pro Flash / GPT-3.5]
+    LLM -->|Parsed Intent| StateMachine[Multi-Step State Machine]
+    StateMachine -->|Execution| Viem[Viem / Wagmi]
+    Viem -->|On-chain| Celo[Celo Network]
+    Celo -->|Events| Indexer[Public Client Logs]
+    Indexer -->|History| Dashboard[User Dashboard]
+```
+
+### Key Components:
+- **ERC-8004 Registry**: Every agent instance is registered on-chain with a Soulbound Identity, ensuring transparency and discoverability.
+- **x402 Economic Model**: A sustainable 0.5% service fee is collected into the CRIA Treasury for every successful transfer, powering the agent's infrastructure.
+- **Phonetic Resilience**: Highly tuned parsing for phonetic variations of regional currencies (e.g., "Niara", "Cedi").
+- **Invisible Bridging**: Background logic for cross-chain transfers (e.g., Solana to Celo) using standardized bridge interfaces.
+
+---
+
+## 📱 Getting Started (User)
+
+1. **Connect**: Open [CRIA](https://celo-agent-mobile.vercel.app) and connect your Celo-compatible wallet (Valora, MetaMask).
+2. **Onboard**: Follow the interactive **Tour Guide** to learn the key features.
+3. **Execute**: Try saying "What's the exchange rate for NGN?" or "Send 1 USDC to 0x...".
+4. **Save**: After a transfer, CRIA will offer to save the recipient to your "AgentVault" for future use.
+
+## 🛠 Developer Setup
+
+```bash
+# Clone and install
+git clone https://github.com/cria-finance/mobile
+npm install
+
+# Setup environment
+cp .env.example .env
+# Add VITE_GEMINI_API_KEY
+
+# Run development
+npm run dev
+```
+
+---
+
+## 🌍 Social Impact
+CRIA is built for Celo's mission of **Prosperity for All**. By reducing remittance costs from 7-10% to less than 0.6%, we put more money directly into the hands of families who need it most.
+
+**Celo Hackathon V2 Runner** | *Solving real-world problems, one block at a time.*

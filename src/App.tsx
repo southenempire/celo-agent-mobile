@@ -4,7 +4,7 @@ import {
     LayoutDashboard, MessageSquare, ArrowUpRight, ArrowDownLeft,
     Coins, BarChart3, ChevronRight, Sun, Moon, Info,
     ShieldCheck, Zap, CheckCircle2, Clock, Globe, RefreshCw, Bot, Sparkles,
-    Copy, ExternalLink, Trophy, Flame, History, RefreshCcw, Users, TrendingUp, Mic, MicOff
+    Copy, ExternalLink, Trophy, Flame, History, RefreshCcw, Users, TrendingUp, Mic, MicOff, X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAccount, useChainId, useWalletClient, usePublicClient } from 'wagmi';
@@ -62,6 +62,14 @@ const App: React.FC = () => {
     const [isSendingDemo, setIsSendingDemo] = useState(false);
     const [copiedField, setCopiedField] = useState<string | null>(null);
     const [isListening, setIsListening] = useState(false);
+    const [tourStep, setTourStep] = useState<number | null>(null);
+
+    const TOUR_STEPS = [
+        { id: 'tour-wallet', title: 'Connect Your Wallet', content: 'First things first! Connect your Celo wallet to start sending funds globally.', position: 'bottom' },
+        { id: 'tour-view-toggle', title: 'Dashboard & Chat', content: 'Switch between the AI Chat and your personal Dashboard to see your stats.', position: 'bottom' },
+        { id: 'tour-actions', title: 'Quick Actions', content: 'Use these shortcuts to check rates or start a transfer with one tap.', position: 'top' },
+        { id: 'tour-input', title: 'Talk to CRIA', content: 'Just say "Send 10 to Mom" or "NGN rate". CRIA understands natural language!', position: 'top' },
+    ];
 
     const copyToClipboard = useCallback((text: string, field: string) => {
         navigator.clipboard.writeText(text).then(() => {
@@ -75,30 +83,43 @@ const App: React.FC = () => {
     const APP_URL = 'https://celo-agent-mobile.vercel.app';
 
     const startSpeechRecognition = () => {
-        if (!('webkitSpeechRecognition' in window)) {
-            alert("Speech recognition not supported in this browser.");
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        
+        if (!SpeechRecognition) {
+            alert("Speech recognition not supported in this browser. Please try Chrome or Safari.");
             return;
         }
-
-        const recognition = new (window as any).webkitSpeechRecognition();
+    
+        const recognition = new SpeechRecognition();
         recognition.continuous = false;
-        recognition.interimResults = false;
+        recognition.interimResults = true;
         recognition.lang = 'en-US';
-
+    
         recognition.onstart = () => setIsListening(true);
         recognition.onend = () => setIsListening(false);
         recognition.onerror = (event: any) => {
             console.error("Speech Recognition Error", event.error);
             setIsListening(false);
+            if (event.error === 'not-allowed') {
+                alert("Microphone access denied. Please enable it in your browser settings.");
+            }
         };
         recognition.onresult = (event: any) => {
             const transcript = event.results[0][0].transcript;
             setInput(transcript);
-            // Optionally auto-send
-            // handleSend(transcript);
+            if (event.results[0].isFinal) {
+                setIsListening(false);
+                // Optional: auto-send on final result
+                // handleSend(transcript);
+            }
         };
-
-        recognition.start();
+    
+        try {
+            recognition.start();
+        } catch (e) {
+            console.error("Failed to start recognition:", e);
+            setIsListening(false);
+        }
     };
 
     const handleDemoTx = async () => {
@@ -299,7 +320,11 @@ const App: React.FC = () => {
                                 ))}
                             </div>
                             <button
-                                onClick={() => { setShowWelcome(false); localStorage.setItem('cria_v2_seen', '1'); }}
+                                onClick={() => { 
+                                    setShowWelcome(false); 
+                                    localStorage.setItem('cria_v2_seen', '1');
+                                    setTourStep(0); // Start the tour right away
+                                }}
                                 className="btn-primary w-full py-4 text-[13px] tracking-widest uppercase"
                             >
                                 Let's Go →
@@ -344,12 +369,12 @@ const App: React.FC = () => {
                         className={`p-2 rounded-xl transition-all ${dark ? 'text-white/40 hover:text-white/80 hover:bg-white/6' : 'text-gray-400 hover:text-gray-700 hover:bg-black/5'}`}>
                         {dark ? <Sun size={16} /> : <Moon size={16} />}
                     </button>
-                    <button
+                    <button id="tour-view-toggle"
                         onClick={() => setView(v => v === 'chat' ? 'dashboard' : 'chat')}
                         className={`p-2 rounded-xl transition-all ${view === 'dashboard' ? 'bg-celo-green/20 text-celo-green' : dark ? 'text-white/40 hover:text-white/80 hover:bg-white/6' : 'text-gray-400 hover:text-gray-700 hover:bg-black/5'}`}>
                         {view === 'chat' ? <LayoutDashboard size={16} /> : <MessageSquare size={16} />}
                     </button>
-                    <button
+                    <button id="tour-wallet"
                         onClick={() => open()}
                         className={`p-2 rounded-xl transition-all active:scale-90 ${isConnected ? 'bg-celo-green/15 text-celo-green border border-celo-green/25' : dark ? 'text-white/40 hover:text-white/80 hover:bg-white/6' : 'text-gray-400 hover:bg-black/5'}`}>
                         <Wallet className="w-4 h-4" />
@@ -366,6 +391,34 @@ const App: React.FC = () => {
                         initial={{ opacity: 0, x: -16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -16 }}
                         transition={{ duration: 0.22 }}
                         className="flex-1 flex flex-col overflow-hidden">
+
+                        {/* Tour Guide / Quick Actions */}
+                        <div className="px-4 pt-4">
+                            <motion.div 
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className={`rounded-2xl p-4 border ${dark ? 'bg-celo-green/5 border-celo-green/10' : 'bg-celo-green/5 border-celo-green/20'}`}
+                            >
+                                <div className="flex items-center gap-2 mb-2">
+                                    <Bot className="text-celo-green w-4 h-4" />
+                                    <span className="text-[11px] font-black uppercase tracking-widest text-celo-green">CRIA Guide</span>
+                                </div>
+                                <p className={`text-[12px] font-medium leading-relaxed mb-3 ${dark ? 'text-white/60' : 'text-gray-600'}`}>
+                                    "You can say **'Send 5 USDC to Mom'** or ask **'What's the Naira rate?'** Check your dashboard for more!"
+                                </p>
+                                <div className="flex flex-wrap gap-2">
+                                    {['Send 0.01 USDC', 'Check Balance', 'NGN Rate'].map(hint => (
+                                        <button 
+                                            key={hint}
+                                            onClick={() => setInput(hint)}
+                                            className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border transition-all ${dark ? 'bg-white/5 border-white/10 text-white/40 hover:text-white/80' : 'bg-white border-gray-200 text-gray-400 hover:text-gray-700'}`}
+                                        >
+                                            {hint}
+                                        </button>
+                                    ))}
+                                </div>
+                            </motion.div>
+                        </div>
 
                         {/* Messages */}
                         <main className="flex-1 overflow-y-auto px-4 py-5 space-y-3 scrollbar-hide">
@@ -468,7 +521,7 @@ const App: React.FC = () => {
                                     <span className="text-[9px] font-bold">~5s settle</span>
                                 </div>
                             </div>
-                            <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2">
+                            <div id="tour-actions" className="flex gap-2 overflow-x-auto scrollbar-hide pb-2">
                                 {QUICK_ACTIONS.map(a => (
                                     <button key={a.label} onClick={() => {
                                         if (a.fillOnly) {
@@ -490,15 +543,9 @@ const App: React.FC = () => {
                         </div>
 
                         {/* Input */}
-                        <footer className={`px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))] backdrop-blur-xl ${dark ? 'bg-[#080B12]/80' : 'bg-[#EEF1F6]/80'}`}>
+                        <footer id="tour-input" className={`px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))] backdrop-blur-xl ${dark ? 'bg-[#080B12]/80' : 'bg-[#EEF1F6]/80'}`}>
                             <div className="flex gap-2">
-                                <button
-                                    onClick={startSpeechRecognition}
-                                    className={`p-3 rounded-2xl transition-all ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-white/5 text-white/50 hover:text-white'}`}
-                                    disabled={isTyping}
-                                >
-                                    {isListening ? <MicOff size={20} /> : <Mic size={20} />}
-                                </button>
+
                                 <input
                                     type="text"
                                     value={input}
@@ -638,6 +685,65 @@ const App: React.FC = () => {
                                 )}
                             </div>
                         </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+            {/* Floating Voice UI Button */}
+            <motion.button
+                initial={{ scale: 0, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.9 }}
+                onClick={startSpeechRecognition}
+                disabled={isTyping}
+                className={`fixed bottom-24 right-6 z-50 p-4 rounded-full shadow-2xl shadow-celo-green/30 flex items-center justify-center transition-all ${
+                    isListening ? 'bg-red-500 text-white' : 'bg-celo-green text-white'
+                }`}
+            >
+                {isListening ? (
+                    <div className="relative">
+                        <MicOff size={24} />
+                        <span className="absolute -inset-1 rounded-full border-2 border-white/20 animate-ping" />
+                    </div>
+                ) : (
+                    <Mic size={24} />
+                )}
+            </motion.button>
+
+            {/* Tour Overlay */}
+            <AnimatePresence>
+                {tourStep !== null && (
+                    <motion.div
+                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-[2px]"
+                        onClick={() => setTourStep(null)}
+                    >
+                        <motion.div
+                            initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0 }}
+                            className={`w-[280px] p-6 rounded-3xl border ${dark ? 'bg-[#0F1520] border-white/10' : 'bg-white border-gray-100'} shadow-2xl overflow-hidden relative`}
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="absolute top-0 left-0 w-1 h-full bg-celo-green" />
+                            <h3 className="text-sm font-black mb-2 uppercase tracking-tight">{TOUR_STEPS[tourStep].title}</h3>
+                            <p className={`text-[12px] leading-relaxed mb-5 ${dark ? 'text-white/50' : 'text-gray-500'}`}>
+                                {TOUR_STEPS[tourStep].content}
+                            </p>
+                            <div className="flex justify-between items-center">
+                                <span className="text-[10px] font-bold text-white/30">{tourStep + 1} / {TOUR_STEPS.length}</span>
+                                <button
+                                    onClick={() => {
+                                        if (tourStep < TOUR_STEPS.length - 1) {
+                                            setTourStep(tourStep + 1);
+                                        } else {
+                                            setTourStep(null);
+                                        }
+                                    }}
+                                    className="bg-celo-green hover:bg-emerald-400 text-white text-[11px] font-black px-4 py-2 rounded-xl transition-all"
+                                >
+                                    {tourStep < TOUR_STEPS.length - 1 ? 'Next Step →' : 'Finish Tour ✨'}
+                                </button>
+                            </div>
+                        </motion.div>
                     </motion.div>
                 )}
             </AnimatePresence>

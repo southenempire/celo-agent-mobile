@@ -40,8 +40,8 @@ export interface TransactionHistory {
 
 export class CeloAgent {
     constructor(
-        private walletClient: WalletClient,
-        private publicClient: PublicClient
+        private walletClient: any,
+        private publicClient: any
     ) { }
 
     private get stablecoins() {
@@ -134,7 +134,7 @@ export class CeloAgent {
                 return this.handleBatchSend(intent, provider);
 
             case 'send':
-                return this.handleSend(intent, provider);
+                return this.handleSend(input, intent, provider);
 
             default: {
                 let replyText = `I'm sorry, I didn't quite catch that! 😅 Could you try saying it a bit differently? Maybe "Send 5 USDC to Mom" or "Save 0x... as Dad"?`;
@@ -212,7 +212,7 @@ export class CeloAgent {
         // Final Execution
         if (session.confirmed || intent.confirmed) {
             ConversationState.clear();
-            const res = await this.handleSend({
+            const res = await this.handleSend(input, {
                 ...intent!,
                 intentType: 'send',
                 amount: session.amount,
@@ -249,7 +249,7 @@ export class CeloAgent {
                     recipient: item.recipient,
                     batch: null
                 };
-                const res = await this.handleSend(subIntent, provider);
+                const res = await this.handleSend(`Send ${item.amount} ${item.currency} to ${item.recipient}`, subIntent, provider);
                 results.push(res);
                 if (res.comparison) {
                     totalSavings += res.comparison.savings;
@@ -321,7 +321,7 @@ export class CeloAgent {
         };
     }
 
-    private async handleSend(intent: ParsedIntent, provider: AIProvider): Promise<AgentResult> {
+    private async handleSend(input: string, intent: ParsedIntent, provider: AIProvider): Promise<AgentResult> {
         if (!intent.amount || !intent.recipient) {
             throw new Error("I need an amount and a recipient. Try: 'Send 5 USDC to 0x...' or 'Send 10 to Mom'");
         }
@@ -330,10 +330,14 @@ export class CeloAgent {
         // Try to resolve name from memory
         if (!recipientAddress.startsWith('0x')) {
             const resolved = LocalMemory.resolveName(recipientAddress);
-            if (!resolved) {
+            if (resolved) {
+                recipientAddress = resolved;
+            } else if (/^\+?\d{10,15}$/.test(recipientAddress)) {
+                // If it looks like a bank account number or phone number, pivot to out_ramp flow
+                return this.handleOutRamp(input, { ...intent, intentType: 'out_ramp', accountNumber: recipientAddress }, provider);
+            } else {
                 throw new Error(`Aww, I don't know who "${recipientAddress}" is yet! 🥺\n\nYou can teach me by saying "Remember 0x... as ${recipientAddress}". I have a great memory!`);
             }
-            recipientAddress = resolved;
         }
 
         let amount = intent.amount;
@@ -341,10 +345,10 @@ export class CeloAgent {
         
         // Map phonetic variations to ISO codes
         const currencyMap: Record<string, string> = {
-            'Naira': 'NGN', 'Niara': 'NGN', 'niara': 'NGN',
-            'Cedi': 'GHS', 'Cedis': 'GHS',
-            'Shilling': 'KES', 'Shillings': 'KES',
-            'Pounds': 'GBP', 'Euro': 'EUR', 'Euros': 'EUR'
+            'Naira': 'NGN', 'Niara': 'NGN', 'niara': 'NGN', 'naira': 'NGN', 'Narra': 'NGN', 'NARRA': 'NGN',
+            'Cedi': 'GHS', 'Cedis': 'GHS', 'cedi': 'GHS',
+            'Shilling': 'KES', 'Shillings': 'KES', 'shilling': 'KES',
+            'Pounds': 'GBP', 'Euro': 'EUR', 'Euros': 'EUR', 'euro': 'EUR'
         };
         if (currencyMap[currency]) {
             currency = currencyMap[currency];
@@ -427,7 +431,7 @@ export class CeloAgent {
             functionName: 'transfer',
             args: [recipientAddress as `0x${string}`, amountInUnits],
             account: this.walletClient.account!,
-        } as any);
+        });
 
         // Collect service fee (x402-style)
         let feeHash: string | undefined;
@@ -438,15 +442,16 @@ export class CeloAgent {
                 functionName: 'transfer',
                 args: [AGENT_TREASURY as `0x${string}`, feeInUnits],
                 account: this.walletClient.account!,
-            } as any);
+            });
         } catch (e) {
             console.warn("Service fee collection failed, primary tx succeeded:", e);
         }
 
         const resolvedName = LocalMemory.resolveAddress(recipientAddress);
+        const contactTip = !resolvedName && recipientAddress.startsWith('0x') ? `\n\n💡 **Tip**: Want me to remember this address? Say "Save ${recipientAddress.slice(0, 6)}... as [Name]".` : '';
         const savingsText = comparison ? `\n\nYou just saved **$${comparison.savings.toFixed(2)}** compared to Western Union! 🥳` : '';
 
-        let replyText = `✅ **Sent ${amountNum} ${currency} to ${resolvedName || recipientAddress.slice(0, 8)}...**\n\nA tiny **$${treasuryFee.toFixed(2)}** service fee was added to support the CRIA Treasury. 💛\n\nTotal Fee: $${(treasuryFee + 0.001).toFixed(3)} (Still way cheaper than Western Union!)${savingsText}`;
+        let replyText = `✅ **Sent ${amountNum} ${currency} to ${resolvedName || recipientAddress.slice(0, 8)}...**\n\nA tiny **$${treasuryFee.toFixed(2)}** service fee was added to support the CRIA Treasury. 💛\n\nTotal Fee: $${(treasuryFee + 0.001).toFixed(3)} (Still way cheaper than Western Union!)${savingsText}${contactTip}`;
         if (conversionMsg) {
             replyText = `✅ ${conversionMsg}${replyText}`;
         }
@@ -519,9 +524,9 @@ export class CeloAgent {
                 };
             };
 
-            const allTx = [
-                ...sentLogs.map(l => mapLog(l, 'sent')),
-                ...receivedLogs.map(l => mapLog(l, 'received')),
+            const allTx: TransactionHistory[] = [
+                ...sentLogs.map((l: any) => mapLog(l, 'sent')),
+                ...receivedLogs.map((l: any) => mapLog(l, 'received')),
             ];
 
             // Deduplicate by hash and sort (most recent first)
