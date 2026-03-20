@@ -11,7 +11,7 @@ const openai = new OpenAI({
 
 export type AIProvider = 'openai' | 'gemini' | 'regex';
 
-export type IntentType = 'send' | 'check_balance' | 'get_rate' | 'help' | 'unknown';
+export type IntentType = 'send' | 'batch_send' | 'out_ramp' | 'check_balance' | 'get_rate' | 'help' | 'save_contact' | 'unknown';
 
 export interface ParsedIntent {
   intentType: IntentType;
@@ -19,6 +19,14 @@ export interface ParsedIntent {
   currency: string | null;
   recipient: string | null;
   targetCurrency: string | null;
+  contactName?: string | null;
+  sourceChain?: string | null;
+  targetChain?: string | null;
+  accountNumber?: string | null;
+  bankName?: string | null;
+  accountName?: string | null;
+  confirmed?: boolean | null;
+  batch?: { amount: string; currency: string; recipient: string }[] | null;
 }
 
 export interface ResilientIntentResult {
@@ -30,15 +38,29 @@ export interface ResilientIntentResult {
 function parseIntentWithRegex(userInput: string): ParsedIntent | null {
   const lower = userInput.toLowerCase();
 
+  // Save contact intent
+  const saveRegex = /(?:save|remember)\s+(0x[a-fA-f0-9]{40})\s+(?:as|to)\s+(\w+)/i;
+  const saveMatch = userInput.match(saveRegex);
+  if (saveMatch) {
+    return {
+      intentType: 'save_contact',
+      amount: null,
+      currency: null,
+      recipient: saveMatch[1],
+      targetCurrency: null,
+      contactName: saveMatch[2],
+    };
+  }
+
   // Send intent
-  const sendRegex = /send\s+([\d.]+)\s+(\w+)\s+to\s+(0x[a-fA-f0-9]{40})/i;
+  const sendRegex = /send\s+([\d.]+)\s+(\w+)\s+to\s+([\w\s]+)/i;
   const sendMatch = userInput.match(sendRegex);
   if (sendMatch) {
     return {
       intentType: 'send',
       amount: sendMatch[1],
       currency: sendMatch[2].toUpperCase(),
-      recipient: sendMatch[3],
+      recipient: sendMatch[3].trim(),
       targetCurrency: null,
     };
   }
@@ -74,11 +96,12 @@ export async function getResilientIntent(userInput: string): Promise<ResilientIn
         messages: [{
           role: "system",
           content: `You are a remittance agent AI. Analyze user messages and return a JSON object with:
-- intentType: "send" | "check_balance" | "get_rate" | "help" | "unknown"
+- intentType: "send" | "check_balance" | "get_rate" | "help" | "save_contact" | "unknown"
 - amount: string or null (for send)
-- currency: "USDC" | "cUSD" or null
-- recipient: "0x..." address or null (for send)
-- targetCurrency: fiat currency code or null (for get_rate)`
+- currency: "USDC" | "cUSD" or fiat codes or null
+- recipient: "0x..." address OR a name like "Mom" or null
+- targetCurrency: fiat currency code or null (for get_rate)
+- contactName: name to save or null (for save_contact)`
         }, {
           role: "user",
           content: userInput

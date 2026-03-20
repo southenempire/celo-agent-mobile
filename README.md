@@ -5,11 +5,13 @@ CRIA (Celo Remittance Intent Agent) is an autonomous, intelligent agent designed
 ## 🚀 Vision
 Remittances today are slow, expensive, and technically intimidating for most users. CRIA removes these barriers by allowing users to interact with their funds using plain language, while the agent handles the underlying blockchain complexities, exchange rates, and ERC-8004 identity verification.
 
-## ✨ Key Features
-- **Natural Language Payments**: "Send 1000 NGN to 0x..." or "Send 5 USDC to my sister."
+## ✨ Key Features (Hackathon Upgrades)
+- **Natural Language Payments**: "Send 10 USDC to Mom" — CRIA now resolves names from your local memory.
+- **Address Book (AgentVault-lite)**: "Remember 0x... as Mom" or "Save this address to my contacts as Sister."
+- **Fee Comparison Engine**: Real-time savings analysis vs. Western Union ($12.40 saved!).
 - **"Native" Fiat Support**: Automatic conversion from fiat amounts (NGN, KES, GHS, GBP, EUR) to USDC/cUSD using live exchange rates.
 - **ERC-8004 Agent Identity**: Trustless registration and identity verification on the Celo blockchain.
-- **Hybrid Intent Architecture**: High-accuracy LLM-based intent parsing with a robust regex-based fallback system.
+- **Hybrid Intent Architecture**: High-accuracy LLM-based intent parsing with redundant fallbacks.
 - **Micro-Fee Abstraction (x402-style)**: Modular service fee collection built into the agent's core protocol.
 - **~5 Second Settlement**: Leveraging Celo's ultra-fast block times for near-instant global transfers.
 

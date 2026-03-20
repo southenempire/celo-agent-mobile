@@ -4,7 +4,7 @@ import {
     LayoutDashboard, MessageSquare, ArrowUpRight, ArrowDownLeft,
     Coins, BarChart3, ChevronRight, Sun, Moon, Info,
     ShieldCheck, Zap, CheckCircle2, Clock, Globe, RefreshCw, Bot, Sparkles,
-    Copy, ExternalLink, Trophy, Flame
+    Copy, ExternalLink, Trophy, Flame, History, RefreshCcw, Users, TrendingUp, Mic, MicOff
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAccount, useChainId, useWalletClient, usePublicClient } from 'wagmi';
@@ -49,11 +49,7 @@ const App: React.FC = () => {
     const agent = useAgent();
 
     const [view, setView] = useState<'chat' | 'dashboard'>('chat');
-    const [messages, setMessages] = useState<Message[]>([{
-        id: '1',
-        text: "Hey! I'm CRIA — your Celo Remittance Agent 🟡\n\nI understand natural language:\n• \"Send 5 USDC to 0x...\"\n• \"What's my balance?\"\n• \"What's the NGN rate today?\"",
-        sender: 'agent'
-    }]);
+    const [messages, setMessages] = useState<Message[]>([{ id: '1', text: "👋 Hey there! I'm CRIA, your friendly Celo finance buddy. \n\nI can help you send money globally in seconds, remember your favorite contacts, and even save you a ton on fees! \n\nHow can I help you today? ✨", sender: 'agent', status: 'info', provider: 'gemini' }]);
     const [input, setInput] = useState('');
     const [isTyping, setIsTyping] = useState(false);
     const [isDarkMode, setIsDarkMode] = useState(true);
@@ -65,6 +61,7 @@ const App: React.FC = () => {
     const [isRegistering, setIsRegistering] = useState(false);
     const [isSendingDemo, setIsSendingDemo] = useState(false);
     const [copiedField, setCopiedField] = useState<string | null>(null);
+    const [isListening, setIsListening] = useState(false);
 
     const copyToClipboard = useCallback((text: string, field: string) => {
         navigator.clipboard.writeText(text).then(() => {
@@ -76,6 +73,33 @@ const App: React.FC = () => {
     const AGENT_REGISTRY = `eip155:${chainId}:${currentRegistry}`;
     const AGENTSCAN_URL = `https://www.agentscan.io/agents/${chainId}/${currentRegistry}`;
     const APP_URL = 'https://celo-agent-mobile.vercel.app';
+
+    const startSpeechRecognition = () => {
+        if (!('webkitSpeechRecognition' in window)) {
+            alert("Speech recognition not supported in this browser.");
+            return;
+        }
+
+        const recognition = new (window as any).webkitSpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.lang = 'en-US';
+
+        recognition.onstart = () => setIsListening(true);
+        recognition.onend = () => setIsListening(false);
+        recognition.onerror = (event: any) => {
+            console.error("Speech Recognition Error", event.error);
+            setIsListening(false);
+        };
+        recognition.onresult = (event: any) => {
+            const transcript = event.results[0][0].transcript;
+            setInput(transcript);
+            // Optionally auto-send
+            // handleSend(transcript);
+        };
+
+        recognition.start();
+    };
 
     const handleDemoTx = async () => {
         if (!agent || isSendingDemo) return;
@@ -174,10 +198,16 @@ const App: React.FC = () => {
             await new Promise(r => setTimeout(r, 800));
 
             setIsTyping(false);
-            const { intent, hash, provider } = result;
+            const { intent, hash, provider, comparison } = result;
+
+            let savingsText = '';
+            if (comparison && comparison.savings > 0) {
+                savingsText = `\n\n💰 **Celo Savings: $${comparison.savings}**\nCompared to Western Union ($${comparison.traditionalFee})`;
+            }
+
             setMessages(prev => prev.map(m => m.id === agentMsgId ? {
                 ...m,
-                text: `✅ Sent ${intent.amount} ${intent.currency || 'USDC'} to ${intent.recipient?.slice(0, 6)}...${intent.recipient?.slice(-4)}\nFee: 0.01 ${intent.currency || 'USDC'} · ~5s settlement`,
+                text: `✅ Sent ${intent.amount} ${intent.currency || 'USDC'} to ${intent.recipient?.slice(0, 6)}...${intent.recipient?.slice(-4)}\nFee: 0.01 ${intent.currency || 'USDC'} · ~5s settlement${savingsText}`,
                 status: 'success', hash, provider
             } : m));
         } catch (err: any) {
@@ -461,27 +491,30 @@ const App: React.FC = () => {
 
                         {/* Input */}
                         <footer className={`px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))] backdrop-blur-xl ${dark ? 'bg-[#080B12]/80' : 'bg-[#EEF1F6]/80'}`}>
-                            <div className="flex items-center gap-2">
-                                <div className={`flex-1 flex items-center rounded-[20px] border px-4 transition-all ${dark ? 'bg-white/6 border-white/10 focus-within:border-celo-green/40 focus-within:bg-white/8' : 'bg-white/90 border-gray-200 focus-within:border-celo-green/60 shadow-sm'}`}>
-                                    <input
-                                        type="text"
-                                        value={input}
-                                        onChange={e => setInput(e.target.value)}
-                                        onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleSend()}
-                                        placeholder={isConnected ? "Talk to CRIA..." : "Connect wallet to start"}
-                                        disabled={isTyping}
-                                        className="flex-1 bg-transparent py-3.5 text-[14px] font-medium focus:outline-none placeholder:text-gray-400"
-                                    />
-                                </div>
-                                <motion.button
-                                    whileTap={{ scale: 0.88 }}
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={startSpeechRecognition}
+                                    className={`p-3 rounded-2xl transition-all ${isListening ? 'bg-red-500 text-white animate-pulse' : 'bg-white/5 text-white/50 hover:text-white'}`}
+                                    disabled={isTyping}
+                                >
+                                    {isListening ? <MicOff size={20} /> : <Mic size={20} />}
+                                </button>
+                                <input
+                                    type="text"
+                                    value={input}
+                                    onChange={(e) => setInput(e.target.value)}
+                                    onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+                                    placeholder={isListening ? "Listening..." : "Tell CRIA what to do... (e.g. 'Hi!') "}
+                                    className="flex-1 bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-white placeholder:text-white/20 focus:outline-none focus:ring-2 focus:ring-yellow-500/50"
+                                    disabled={isTyping}
+                                />
+                                <button
                                     onClick={() => handleSend()}
                                     disabled={!input.trim() || isTyping}
-                                    className="w-11 h-11 bg-gradient-to-br from-celo-green to-emerald-500 rounded-[16px] flex items-center justify-center text-white shadow-lg shadow-celo-green/30 transition-all disabled:opacity-40 flex-shrink-0"
-                                    style={{ boxShadow: input.trim() ? '0 6px 20px rgba(53,208,127,0.4)' : undefined }}
+                                    className="bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed text-black p-3 rounded-2xl transition-all shadow-lg shadow-yellow-500/20"
                                 >
-                                    {isTyping ? <Loader2 size={17} className="animate-spin" /> : <Send size={17} />}
-                                </motion.button>
+                                    {isTyping ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
+                                </button>
                             </div>
                             <p className={`text-center text-[9px] font-bold uppercase tracking-widest mt-2 ${dark ? 'text-white/20' : 'text-gray-300'}`}>
                                 Encrypted · Celo L2 · ERC-8004

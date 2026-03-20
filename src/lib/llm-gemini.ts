@@ -16,38 +16,40 @@ export async function parseIntentWithGemini(userInput: string) {
     });
 
     const prompt = `
-You are CRIA, an intelligent Celo remittance agent. Analyze the user's message and classify it.
+You are CRIA, an intelligent, empathetic, and ultra-friendly Celo remittance agent. You're here to help "normies" (non-crypto users) move money globally with ease.
 
 User message: "${userInput}"
 
 Return ONLY a JSON object with the following structure:
 {
-  "intentType": "send" | "check_balance" | "get_rate" | "help" | "unknown",
+  "intentType": "send" | "batch_send" | "out_ramp" | "check_balance" | "get_rate" | "help" | "save_contact" | "unknown",
   "amount": "10.5" | null,
-  "currency": "USDC" | "cUSD" | "NGN" | "KES" | "GHS" | "GBP" | "EUR" | null,
-  "recipient": "0x..." | null,
-  "targetCurrency": "NGN" | "KES" | "GHS" | "GBP" | "USD" | null
+  "currency": "USDC" | "cUSD" | "NGN" | "KES" | "GHS" | "GBP" | "EUR" | "Naira" | "Niara" | "Cedi" | "Shillings" | "USD" | null,
+  "recipient": "0x..." | "Mom" | "Sister" | null,
+  "targetCurrency": "NGN" | "KES" | "GHS" | "GBP" | "USD" | null,
+  "contactName": "name to save" | null,
+  "accountNumber": "1234567890" | null,
+  "bankName": "Bank ABC" | null,
+  "accountName": "John Doe" | null,
+  "confirmed": true | false | null,
+  "sourceChain": "Solana" | "Ethereum" | "Celo" | "Base" | null,
+  "targetChain": "Solana" | "Ethereum" | "Celo" | "Base" | null,
+  "batch": [
+    { "amount": "5", "currency": "USDC", "recipient": "Mom" },
+    { "amount": "10", "currency": "USDC", "recipient": "Sister" }
+  ] | null
 }
 
-Rules:
-- intentType "send": user wants to transfer tokens or fiat to an address
-- intentType "check_balance": user asks about their balance, funds, or holdings
-- intentType "get_rate": user asks about exchange rates, conversion, or currency prices
-- intentType "help": user asks how to use the app, what CRIA can do, etc.
-- intentType "unknown": anything else
-- amount: only for "send" intents, must be a number string
-- currency: the stablecoin OR fiat currency. If user says NGN/KES/etc, use that fiat code — the agent will convert it. Default to "USDC" if unspecified.
-- recipient: only for "send" intents, must be an Ethereum-style 0x address
-- targetCurrency: for "get_rate", which fiat currency they are asking about
+Rules & Persona:
+- Be WARM and encouraging. If the user says "Hi", treat it as "help" but keep it conversational.
+- intentType "batch_send": Use this if the user wants to send money to MULTIPLE people at once. 
+- sourceChain / targetChain: If the user mentions moving money from one chain to another (e.g., "Bridge $10 from Solana to Celo" or "Send from Solana to Mom"), populate these.
+- amount/currency: If it's a single send, populate these. If it's a batch, put the details in "batch".
+- Resolve names like "Mom" or "Sister" as strings in the recipient field.
 
 Examples:
-- "Send 5 USDC to 0xabc..." → { "intentType": "send", "amount": "5", "currency": "USDC", "recipient": "0xabc...", "targetCurrency": null }
-- "Send 5000 NGN to 0xabc..." → { "intentType": "send", "amount": "5000", "currency": "NGN", "recipient": "0xabc...", "targetCurrency": null }
-- "Send ₦5000 to 0xabc..." → { "intentType": "send", "amount": "5000", "currency": "NGN", "recipient": "0xabc...", "targetCurrency": null }
-- "Send 500 KES to 0xabc..." → { "intentType": "send", "amount": "500", "currency": "KES", "recipient": "0xabc...", "targetCurrency": null }
-- "What is my balance?" → { "intentType": "check_balance", "amount": null, "currency": null, "recipient": null, "targetCurrency": null }
-- "What is the NGN rate?" → { "intentType": "get_rate", "amount": null, "currency": null, "recipient": null, "targetCurrency": "NGN" }
-- "what can you do" → { "intentType": "help", "amount": null, "currency": null, "recipient": null, "targetCurrency": null }
+- "Send 1 USDC from Solana to Mom" → { "intentType": "send", "amount": "1", "currency": "USDC", "recipient": "Mom", "sourceChain": "Solana", "targetChain": "Celo", "batch": null }
+- "Bridge 10 USDC from Celo to Solana" → { "intentType": "send", "amount": "10", "currency": "USDC", "recipient": null, "sourceChain": "Celo", "targetChain": "Solana", "batch": null }
 `;
 
     const result = await model.generateContent(prompt);
@@ -57,11 +59,12 @@ Examples:
     if (!content) throw new Error("Gemini failed to return content");
 
     return JSON.parse(content) as {
-        intentType: 'send' | 'check_balance' | 'get_rate' | 'help' | 'unknown';
+        intentType: 'send' | 'check_balance' | 'get_rate' | 'help' | 'save_contact' | 'unknown';
         amount: string | null;
         currency: string | null;
         recipient: string | null;
         targetCurrency: string | null;
+        contactName: string | null;
     };
 }
 
