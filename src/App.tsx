@@ -23,6 +23,7 @@ interface Message {
 }
 
 const QUICK_ACTIONS = [
+    { label: '💸 Send Solana', prompt: 'Send 0.05 USDC from Solana to ', fillOnly: true },
     { label: '💸 Send USDC', prompt: 'Send 0.05 USDC to ', fillOnly: true },
     { label: '₦ Send NGN', prompt: 'Send 5000 NGN to ', fillOnly: true },
     { label: 'KES Send', prompt: 'Send 500 KES to ', fillOnly: true },
@@ -64,6 +65,7 @@ const App: React.FC = () => {
     const [isListening, setIsListening] = useState(false);
     const [tourStep, setTourStep] = useState<number | null>(null);
     const [spotlightRect, setSpotlightRect] = useState<{ x: number, y: number, width: number, height: number } | null>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
 
     const TOUR_STEPS = [
         { id: 'tour-wallet', title: 'Connect Your Wallet', content: 'First things first! Connect your Celo wallet to start sending funds globally.', position: 'bottom' },
@@ -73,12 +75,18 @@ const App: React.FC = () => {
     ];
 
     useEffect(() => {
-        if (tourStep !== null) {
+        if (tourStep !== null && containerRef.current) {
             const step = TOUR_STEPS[tourStep];
             const el = document.getElementById(step.id);
             if (el) {
                 const rect = el.getBoundingClientRect();
-                setSpotlightRect({ x: rect.x, y: rect.y, width: rect.width, height: rect.height });
+                const containerRect = containerRef.current.getBoundingClientRect();
+                setSpotlightRect({ 
+                    x: rect.x - containerRect.x, 
+                    y: rect.y - containerRect.y, 
+                    width: rect.width, 
+                    height: rect.height 
+                });
             }
         } else {
             setSpotlightRect(null);
@@ -88,12 +96,18 @@ const App: React.FC = () => {
     // Handle window resize for spotlight
     useEffect(() => {
         const handleResize = () => {
-            if (tourStep !== null) {
+            if (tourStep !== null && containerRef.current) {
                 const step = TOUR_STEPS[tourStep];
                 const el = document.getElementById(step.id);
                 if (el) {
                     const rect = el.getBoundingClientRect();
-                    setSpotlightRect({ x: rect.x, y: rect.y, width: rect.width, height: rect.height });
+                    const containerRect = containerRef.current.getBoundingClientRect();
+                    setSpotlightRect({ 
+                        x: rect.x - containerRect.x, 
+                        y: rect.y - containerRect.y, 
+                        width: rect.width, 
+                        height: rect.height 
+                    });
                 }
             }
         };
@@ -303,7 +317,7 @@ const App: React.FC = () => {
     const dark = isDarkMode;
 
     return (
-        <div className={`flex flex-col h-screen max-w-md mx-auto relative overflow-hidden font-sans transition-colors duration-500 ${dark ? 'bg-[#080B12] text-white' : 'bg-[#EEF1F6] text-[#1A1F2E]'}`}>
+        <div ref={containerRef} className={`flex flex-col h-screen max-w-md mx-auto relative overflow-hidden font-sans transition-colors duration-500 ${dark ? 'bg-[#080B12] text-white' : 'bg-[#EEF1F6] text-[#1A1F2E]'}`}>
 
             {/* Ambient background blobs */}
             <div className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -446,8 +460,8 @@ const App: React.FC = () => {
                                                 : m.status === 'error'
                                                     ? dark ? 'bg-red-500/12 border border-red-500/20 rounded-bl-[6px]' : 'bg-red-50 border border-red-200 rounded-bl-[6px]'
                                                     : m.status === 'success'
-                                                        ? dark ? 'bg-celo-green/10 border border-celo-green/20 rounded-bl-[6px]' : 'bg-emerald-50 border border-emerald-200 rounded-bl-[6px]'
-                                                        : dark ? 'bg-white/6 border border-white/8 rounded-bl-[6px]' : 'bg-white/90 border border-gray-100 rounded-bl-[6px] shadow-sm'
+                                                        ? dark ? 'bg-celo-green/10 border border-celo-green/20 rounded-bl-[6px]' : 'bg-emerald-50 border border-emerald-300 rounded-bl-[6px]'
+                                                        : dark ? 'bg-white/6 border border-white/8 rounded-bl-[6px]' : 'bg-white border border-gray-200 rounded-bl-[6px] shadow-sm'
                                         }`}>
 
                                             {/* Progress bar */}
@@ -467,7 +481,7 @@ const App: React.FC = () => {
                                                 </div>
                                             )}
 
-                                            <p className={`text-[13.5px] leading-relaxed whitespace-pre-line font-medium ${m.sender === 'user' ? 'text-white' : dark ? 'text-white/90' : 'text-gray-800'}`}>
+                                            <p className={`text-[13.5px] leading-relaxed whitespace-pre-line font-medium ${m.sender === 'user' ? 'text-white' : dark ? 'text-white/90' : 'text-gray-900'}`}>
                                                 {m.text}
                                             </p>
 
@@ -711,11 +725,11 @@ const App: React.FC = () => {
             {/* Premium Spotlight Tour */}
             <AnimatePresence>
                 {tourStep !== null && spotlightRect && (
-                    <>
+                    <div className="absolute inset-0 z-[60] overflow-hidden pointer-events-none">
                         {/* SVG Mask Overlay */}
                         <motion.div
                             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                            className="fixed inset-0 z-[60] pointer-events-none"
+                            className="absolute inset-0 pointer-events-none"
                         >
                             <svg className="w-full h-full">
                                 <defs>
@@ -745,14 +759,14 @@ const App: React.FC = () => {
                             animate={{ 
                                 opacity: 1, 
                                 scale: 1, 
-                                x: Math.max(16, Math.min(window.innerWidth - 316, spotlightRect.x + spotlightRect.width / 2 - 150)),
-                                y: Math.max(80, Math.min(window.innerHeight - 200, spotlightRect.y > window.innerHeight / 2 
+                                x: Math.max(16, Math.min(375 - 316, spotlightRect.x + spotlightRect.width / 2 - 150)), // Clamped to mobile width (375-ish)
+                                y: Math.max(80, Math.min(800, spotlightRect.y > 400 
                                     ? spotlightRect.y - 180 
                                     : spotlightRect.y + spotlightRect.height + 24))
                             }}
                             exit={{ opacity: 0, scale: 0.9 }}
                             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                            className={`fixed z-[70] w-[300px] p-6 rounded-[24px] border border-white/10 shadow-2xl backdrop-blur-2xl ${dark ? 'bg-[#151B28]/95' : 'bg-white/95 border-gray-100'} overflow-hidden shadow-celo-green/5`}
+                            className={`absolute z-[70] w-[300px] p-6 rounded-[24px] border shadow-2xl backdrop-blur-2xl ${dark ? 'bg-[#151B28]/95 border-white/10' : 'bg-white border-gray-300'} overflow-hidden shadow-celo-green/5 pointer-events-auto`}
                         >
                             <div className="absolute top-0 left-0 w-1 h-full bg-celo-green" />
                             <div className="flex justify-between items-start mb-3">
@@ -762,11 +776,11 @@ const App: React.FC = () => {
                                     </div>
                                     <h3 className="text-[12px] font-black uppercase tracking-widest text-celo-green">{TOUR_STEPS[tourStep].title}</h3>
                                 </div>
-                                <button onClick={() => setTourStep(null)} className="text-white/20 hover:text-white/60 transition-colors">
+                                <button onClick={() => setTourStep(null)} className={`${dark ? 'text-white/20 hover:text-white/60' : 'text-black/20 hover:text-black/60'} transition-colors`}>
                                     <X size={14} />
                                 </button>
                             </div>
-                            <p className={`text-[13px] font-medium leading-relaxed mb-6 ${dark ? 'text-white/60' : 'text-gray-600'}`}>
+                            <p className={`text-[13px] font-medium leading-relaxed mb-6 ${dark ? 'text-white/60' : 'text-gray-700'}`}>
                                 {TOUR_STEPS[tourStep].content}
                             </p>
                             <div className="flex justify-between items-center">
@@ -774,7 +788,7 @@ const App: React.FC = () => {
                                     <button
                                         onClick={() => tourStep > 0 && setTourStep(tourStep - 1)}
                                         disabled={tourStep === 0}
-                                        className={`text-[10px] font-bold uppercase tracking-tight transition-opacity ${tourStep === 0 ? 'opacity-0' : 'text-white/40 hover:text-white'}`}
+                                        className={`text-[10px] font-bold uppercase tracking-tight transition-opacity ${tourStep === 0 ? 'opacity-0' : dark ? 'text-white/40 hover:text-white' : 'text-gray-400 hover:text-gray-700'}`}
                                     >
                                         ← Back
                                     </button>
@@ -787,7 +801,7 @@ const App: React.FC = () => {
                                             setTourStep(null);
                                         }
                                     }}
-                                    className="bg-white text-black text-[11px] font-black px-5 py-2.5 rounded-xl hover:bg-celo-green hover:text-white transition-all shadow-lg active:scale-95"
+                                    className={`bg-white text-black text-[11px] font-black px-5 py-2.5 rounded-xl hover:bg-celo-green hover:text-white transition-all shadow-lg active:scale-95 border ${!dark && 'border-gray-200'}`}
                                 >
                                     {tourStep < TOUR_STEPS.length - 1 ? 'Next Step' : 'Finish ✨'}
                                 </button>
@@ -798,7 +812,7 @@ const App: React.FC = () => {
                                 ))}
                             </div>
                         </motion.div>
-                    </>
+                    </div>
                 )}
             </AnimatePresence>
         </div>
