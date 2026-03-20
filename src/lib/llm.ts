@@ -79,8 +79,8 @@ function parseIntentWithRegex(userInput: string): ParsedIntent | null {
     return { intentType: 'get_rate', amount: null, currency: null, recipient: null, targetCurrency: foundCurrency };
   }
 
-  // Help
-  if (lower.includes('help') || lower.includes('what can you') || lower.includes('how do i') || lower.includes('capabilities')) {
+  // Help / Greeting
+  if (lower.includes('help') || lower.includes('what can you') || lower.includes('how do i') || lower.includes('capabilities') || lower === 'hi' || lower === 'hello' || lower === 'hey') {
     return { intentType: 'help', amount: null, currency: null, recipient: null, targetCurrency: null };
   }
 

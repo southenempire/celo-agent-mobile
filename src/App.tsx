@@ -422,33 +422,6 @@ const App: React.FC = () => {
                         transition={{ duration: 0.22 }}
                         className="flex-1 flex flex-col overflow-hidden">
 
-                        {/* Tour Guide / Quick Actions */}
-                        <div className="px-4 pt-4">
-                            <motion.div 
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                className={`rounded-2xl p-4 border ${dark ? 'bg-celo-green/5 border-celo-green/10' : 'bg-celo-green/5 border-celo-green/20'}`}
-                            >
-                                <div className="flex items-center gap-2 mb-2">
-                                    <Bot className="text-celo-green w-4 h-4" />
-                                    <span className="text-[11px] font-black uppercase tracking-widest text-celo-green">CRIA Guide</span>
-                                </div>
-                                <p className={`text-[12px] font-medium leading-relaxed mb-3 ${dark ? 'text-white/60' : 'text-gray-600'}`}>
-                                    "You can say **'Send 5 USDC to Mom'** or ask **'What's the Naira rate?'** Check your dashboard for more!"
-                                </p>
-                                <div className="flex flex-wrap gap-2">
-                                    {['Send 0.01 USDC', 'Check Balance', 'NGN Rate'].map(hint => (
-                                        <button 
-                                            key={hint}
-                                            onClick={() => setInput(hint)}
-                                            className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border transition-all ${dark ? 'bg-white/5 border-white/10 text-white/40 hover:text-white/80' : 'bg-white border-gray-200 text-gray-400 hover:text-gray-700'}`}
-                                        >
-                                            {hint}
-                                        </button>
-                                    ))}
-                                </div>
-                            </motion.div>
-                        </div>
 
                         {/* Messages */}
                         <main className="flex-1 overflow-y-auto px-4 py-5 space-y-3 scrollbar-hide">
@@ -773,29 +746,38 @@ const App: React.FC = () => {
                                 opacity: 1, 
                                 scale: 1, 
                                 x: Math.max(16, Math.min(window.innerWidth - 316, spotlightRect.x + spotlightRect.width / 2 - 150)),
-                                y: spotlightRect.y > window.innerHeight / 2 
+                                y: Math.max(80, Math.min(window.innerHeight - 200, spotlightRect.y > window.innerHeight / 2 
                                     ? spotlightRect.y - 180 
-                                    : spotlightRect.y + spotlightRect.height + 24
+                                    : spotlightRect.y + spotlightRect.height + 24))
                             }}
                             exit={{ opacity: 0, scale: 0.9 }}
                             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                            className={`fixed z-[70] w-[300px] p-6 rounded-[24px] border border-white/10 shadow-2xl backdrop-blur-2xl ${dark ? 'bg-[#151B28]/90' : 'bg-white/95 border-gray-100'} overflow-hidden shadow-celo-green/5`}
+                            className={`fixed z-[70] w-[300px] p-6 rounded-[24px] border border-white/10 shadow-2xl backdrop-blur-2xl ${dark ? 'bg-[#151B28]/95' : 'bg-white/95 border-gray-100'} overflow-hidden shadow-celo-green/5`}
                         >
                             <div className="absolute top-0 left-0 w-1 h-full bg-celo-green" />
-                            <div className="flex items-center gap-2 mb-3">
-                                <div className="w-5 h-5 rounded-md bg-celo-green/20 flex items-center justify-center">
-                                    <Sparkles size={12} className="text-celo-green" />
+                            <div className="flex justify-between items-start mb-3">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-5 h-5 rounded-md bg-celo-green/20 flex items-center justify-center">
+                                        <Sparkles size={12} className="text-celo-green" />
+                                    </div>
+                                    <h3 className="text-[12px] font-black uppercase tracking-widest text-celo-green">{TOUR_STEPS[tourStep].title}</h3>
                                 </div>
-                                <h3 className="text-[12px] font-black uppercase tracking-widest text-celo-green">{TOUR_STEPS[tourStep].title}</h3>
+                                <button onClick={() => setTourStep(null)} className="text-white/20 hover:text-white/60 transition-colors">
+                                    <X size={14} />
+                                </button>
                             </div>
                             <p className={`text-[13px] font-medium leading-relaxed mb-6 ${dark ? 'text-white/60' : 'text-gray-600'}`}>
                                 {TOUR_STEPS[tourStep].content}
                             </p>
                             <div className="flex justify-between items-center">
-                                <div className="flex gap-1">
-                                    {TOUR_STEPS.map((_, i) => (
-                                        <div key={i} className={`h-1 rounded-full transition-all duration-300 ${i === tourStep ? 'w-4 bg-celo-green' : 'w-1 bg-white/10'}`} />
-                                    ))}
+                                <div className="flex gap-1.5">
+                                    <button
+                                        onClick={() => tourStep > 0 && setTourStep(tourStep - 1)}
+                                        disabled={tourStep === 0}
+                                        className={`text-[10px] font-bold uppercase tracking-tight transition-opacity ${tourStep === 0 ? 'opacity-0' : 'text-white/40 hover:text-white'}`}
+                                    >
+                                        ← Back
+                                    </button>
                                 </div>
                                 <button
                                     onClick={() => {
@@ -809,6 +791,11 @@ const App: React.FC = () => {
                                 >
                                     {tourStep < TOUR_STEPS.length - 1 ? 'Next Step' : 'Finish ✨'}
                                 </button>
+                            </div>
+                            <div className="mt-4 flex gap-1 justify-center">
+                                {TOUR_STEPS.map((_, i) => (
+                                    <div key={i} className={`h-1.5 rounded-full transition-all duration-300 ${i === tourStep ? 'w-6 bg-celo-green' : 'w-2 bg-white/10'}`} />
+                                ))}
                             </div>
                         </motion.div>
                     </>
