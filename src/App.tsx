@@ -63,6 +63,7 @@ const App: React.FC = () => {
     const [copiedField, setCopiedField] = useState<string | null>(null);
     const [isListening, setIsListening] = useState(false);
     const [tourStep, setTourStep] = useState<number | null>(null);
+    const [spotlightRect, setSpotlightRect] = useState<{ x: number, y: number, width: number, height: number } | null>(null);
 
     const TOUR_STEPS = [
         { id: 'tour-wallet', title: 'Connect Your Wallet', content: 'First things first! Connect your Celo wallet to start sending funds globally.', position: 'bottom' },
@@ -70,6 +71,35 @@ const App: React.FC = () => {
         { id: 'tour-actions', title: 'Quick Actions', content: 'Use these shortcuts to check rates or start a transfer with one tap.', position: 'top' },
         { id: 'tour-input', title: 'Talk to CRIA', content: 'Just say "Send 10 to Mom" or "NGN rate". CRIA understands natural language!', position: 'top' },
     ];
+
+    useEffect(() => {
+        if (tourStep !== null) {
+            const step = TOUR_STEPS[tourStep];
+            const el = document.getElementById(step.id);
+            if (el) {
+                const rect = el.getBoundingClientRect();
+                setSpotlightRect({ x: rect.x, y: rect.y, width: rect.width, height: rect.height });
+            }
+        } else {
+            setSpotlightRect(null);
+        }
+    }, [tourStep]);
+
+    // Handle window resize for spotlight
+    useEffect(() => {
+        const handleResize = () => {
+            if (tourStep !== null) {
+                const step = TOUR_STEPS[tourStep];
+                const el = document.getElementById(step.id);
+                if (el) {
+                    const rect = el.getBoundingClientRect();
+                    setSpotlightRect({ x: rect.x, y: rect.y, width: rect.width, height: rect.height });
+                }
+            }
+        };
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, [tourStep]);
 
     const copyToClipboard = useCallback((text: string, field: string) => {
         navigator.clipboard.writeText(text).then(() => {
@@ -705,26 +735,68 @@ const App: React.FC = () => {
                 )}
             </AnimatePresence>
 
-            {/* Tour Overlay */}
+            {/* Premium Spotlight Tour */}
             <AnimatePresence>
-                {tourStep !== null && (
-                    <motion.div
-                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                        className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-[2px]"
-                        onClick={() => setTourStep(null)}
-                    >
+                {tourStep !== null && spotlightRect && (
+                    <>
+                        {/* SVG Mask Overlay */}
                         <motion.div
-                            initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, opacity: 0 }}
-                            className={`w-[280px] p-6 rounded-3xl border ${dark ? 'bg-[#0F1520] border-white/10' : 'bg-white border-gray-100'} shadow-2xl overflow-hidden relative`}
-                            onClick={(e) => e.stopPropagation()}
+                            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-[60] pointer-events-none"
+                        >
+                            <svg className="w-full h-full">
+                                <defs>
+                                    <mask id="spotlight-mask">
+                                        <rect x="0" y="0" width="100%" height="100%" fill="white" />
+                                        <motion.rect
+                                            initial={spotlightRect}
+                                            animate={{ 
+                                                x: spotlightRect.x - 8, 
+                                                y: spotlightRect.y - 8, 
+                                                width: spotlightRect.width + 16, 
+                                                height: spotlightRect.height + 16,
+                                                rx: 16
+                                            }}
+                                            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                                            fill="black"
+                                        />
+                                    </mask>
+                                </defs>
+                                <rect x="0" y="0" width="100%" height="100%" fill="rgba(0,0,0,0.7)" mask="url(#spotlight-mask)" className="pointer-events-auto" onClick={() => setTourStep(null)} />
+                            </svg>
+                        </motion.div>
+
+                        {/* Floating Tooltip */}
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                            animate={{ 
+                                opacity: 1, 
+                                scale: 1, 
+                                x: Math.max(16, Math.min(window.innerWidth - 316, spotlightRect.x + spotlightRect.width / 2 - 150)),
+                                y: spotlightRect.y > window.innerHeight / 2 
+                                    ? spotlightRect.y - 180 
+                                    : spotlightRect.y + spotlightRect.height + 24
+                            }}
+                            exit={{ opacity: 0, scale: 0.9 }}
+                            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                            className={`fixed z-[70] w-[300px] p-6 rounded-[24px] border border-white/10 shadow-2xl backdrop-blur-2xl ${dark ? 'bg-[#151B28]/90' : 'bg-white/95 border-gray-100'} overflow-hidden shadow-celo-green/5`}
                         >
                             <div className="absolute top-0 left-0 w-1 h-full bg-celo-green" />
-                            <h3 className="text-sm font-black mb-2 uppercase tracking-tight">{TOUR_STEPS[tourStep].title}</h3>
-                            <p className={`text-[12px] leading-relaxed mb-5 ${dark ? 'text-white/50' : 'text-gray-500'}`}>
+                            <div className="flex items-center gap-2 mb-3">
+                                <div className="w-5 h-5 rounded-md bg-celo-green/20 flex items-center justify-center">
+                                    <Sparkles size={12} className="text-celo-green" />
+                                </div>
+                                <h3 className="text-[12px] font-black uppercase tracking-widest text-celo-green">{TOUR_STEPS[tourStep].title}</h3>
+                            </div>
+                            <p className={`text-[13px] font-medium leading-relaxed mb-6 ${dark ? 'text-white/60' : 'text-gray-600'}`}>
                                 {TOUR_STEPS[tourStep].content}
                             </p>
                             <div className="flex justify-between items-center">
-                                <span className="text-[10px] font-bold text-white/30">{tourStep + 1} / {TOUR_STEPS.length}</span>
+                                <div className="flex gap-1">
+                                    {TOUR_STEPS.map((_, i) => (
+                                        <div key={i} className={`h-1 rounded-full transition-all duration-300 ${i === tourStep ? 'w-4 bg-celo-green' : 'w-1 bg-white/10'}`} />
+                                    ))}
+                                </div>
                                 <button
                                     onClick={() => {
                                         if (tourStep < TOUR_STEPS.length - 1) {
@@ -733,13 +805,13 @@ const App: React.FC = () => {
                                             setTourStep(null);
                                         }
                                     }}
-                                    className="bg-celo-green hover:bg-emerald-400 text-white text-[11px] font-black px-4 py-2 rounded-xl transition-all"
+                                    className="bg-white text-black text-[11px] font-black px-5 py-2.5 rounded-xl hover:bg-celo-green hover:text-white transition-all shadow-lg active:scale-95"
                                 >
-                                    {tourStep < TOUR_STEPS.length - 1 ? 'Next Step →' : 'Finish Tour ✨'}
+                                    {tourStep < TOUR_STEPS.length - 1 ? 'Next Step' : 'Finish ✨'}
                                 </button>
                             </div>
                         </motion.div>
-                    </motion.div>
+                    </>
                 )}
             </AnimatePresence>
         </div>
