@@ -14,19 +14,36 @@ export default async function handler(req: any, res: any) {
 
   // Diagnostic Logs (visible in Vercel Logs)
   console.log(`[API/Chat] Mode: ${mode}, Input Length: ${userInput.length}`);
-  console.log(`[API/Chat] Gemini Key Set: ${!!process.env.GEMINI_API_KEY}`);
-  console.log(`[API/Chat] OpenAI Key Set: ${!!process.env.OPENAI_API_KEY}`);
 
   try {
     if (mode === 'reply') {
-      if (!process.env.GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is not configured on the server.");
-      
-      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-      const prompt = `You are CRIA, a friendly AI agent for fast remittances on Celo. User: "${userInput}". Reply in 1-2 warm sentences.`;
-      
-      const result = await model.generateContent(prompt);
-      return res.status(200).json({ reply: result.response.text().trim() });
+      // 1. Try Gemini first
+      try {
+        if (!process.env.GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is not configured.");
+        
+        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-8b" }); // 8b is more stable for quick chats
+        const prompt = `You are CRIA, a friendly AI agent for fast remittances on Celo. User: "${userInput}". Reply in 1-2 warm sentences.`;
+        
+        const result = await model.generateContent(prompt);
+        return res.status(200).json({ reply: result.response.text().trim() });
+      } catch (gemError: any) {
+        console.warn('[API/Chat] Gemini reply failed, falling back to OpenAI:', gemError.message);
+        
+        if (!process.env.OPENAI_API_KEY) throw new Error("Gemini failed and OPENAI_API_KEY is missing.");
+
+        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+        const response = await openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: 'You are CRIA, a friendly AI agent for Celo payments. Reply in 1-2 warm sentences.' },
+            { role: 'user', content: userInput }
+          ],
+        });
+
+        const reply = response.choices[0].message.content;
+        return res.status(200).json({ reply: reply?.trim() || "I'm here to help with your Celo transactions! 🦾" });
+      }
     }
 
     // Default: Parse Intent
@@ -35,7 +52,7 @@ export default async function handler(req: any, res: any) {
       
       const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
       const model = genAI.getGenerativeModel({
-        model: "gemini-1.5-flash",
+        model: "gemini-1.5-flash-8b",
         generationConfig: { responseMimeType: "application/json" }
       });
 
@@ -60,7 +77,7 @@ export default async function handler(req: any, res: any) {
       const content = result.response.text();
       return res.status(200).json({ intent: JSON.parse(content), provider: 'gemini' });
     } catch (geminiError) {
-      console.error('[API/Chat] Gemini intent parsing failed:', geminiError);
+      console.warn('[API/Chat] Gemini intent parsing failed, falling back to OpenAI:', geminiError);
 
       if (!process.env.OPENAI_API_KEY) throw new Error("Gemini failed and OPENAI_API_KEY is not configured.");
 
