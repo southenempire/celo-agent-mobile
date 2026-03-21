@@ -10,6 +10,8 @@
         "preview": "vite preview"
     },
     "dependencies": {
+        "@0xsquid/sdk": "^2.13.0",
+        "@0xsquid/squid-types": "^0.1.219",
         "@google/generative-ai": "^0.24.1",
         "@reown/appkit": "^1.8.19",
         "@reown/appkit-adapter-wagmi": "^1.8.19",

@@ -59,12 +59,19 @@ Examples:
     if (!content) throw new Error("Gemini failed to return content");
 
     return JSON.parse(content) as {
-        intentType: 'send' | 'check_balance' | 'get_rate' | 'help' | 'save_contact' | 'unknown';
+        intentType: 'send' | 'batch_send' | 'out_ramp' | 'check_balance' | 'get_rate' | 'help' | 'save_contact' | 'unknown';
         amount: string | null;
         currency: string | null;
         recipient: string | null;
         targetCurrency: string | null;
         contactName: string | null;
+        accountNumber: string | null;
+        bankName: string | null;
+        accountName: string | null;
+        confirmed: boolean | null;
+        sourceChain: string | null;
+        targetChain: string | null;
+        batch: { amount: string; currency: string; recipient: string }[] | null;
     };
 }
 

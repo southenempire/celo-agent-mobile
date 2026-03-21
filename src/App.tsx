@@ -12,6 +12,7 @@ import { useAppKit } from '@reown/appkit/react';
 import { useAgent } from './hooks/useAgent';
 import { registerAgentOnChain, formatAgentRegistry, ERC8004_REGISTRY_MAINNET, ERC8004_REGISTRY_SEPOLIA, ERC8004_ABI } from './lib/erc8004';
 import { type TransactionHistory, AGENT_TREASURY } from './lib/agent-core';
+import { DecentralizedMemory } from './lib/decentralized-memory';
 
 interface Message {
     id: string;
@@ -23,14 +24,14 @@ interface Message {
 }
 
 const QUICK_ACTIONS = [
-    { label: '💸 Send Solana', prompt: 'Send 0.05 USDC from Solana to ', fillOnly: true },
-    { label: '💸 Send USDC', prompt: 'Send 0.05 USDC to ', fillOnly: true },
-    { label: '₦ Send NGN', prompt: 'Send 5000 NGN to ', fillOnly: true },
-    { label: 'KES Send', prompt: 'Send 500 KES to ', fillOnly: true },
-    { label: '💰 Balance', prompt: 'What is my current balance?', fillOnly: false },
-    { label: '📈 NGN Rate', prompt: 'What is the NGN exchange rate?', fillOnly: false },
-    { label: '🌍 KES Rate', prompt: 'What is the KES exchange rate?', fillOnly: false },
-    { label: '🤖 Help', prompt: 'What can you do?', fillOnly: false },
+    { label: 'Bridge Assets', prompt: 'Bridge 5 USDC to Base address ', fillOnly: true },
+    { label: 'Fiat Off-ramp', prompt: 'Withdraw 5000 NGN to my bank account', fillOnly: false },
+    { label: 'Send USDC', prompt: 'Send 0.05 USDC to ', fillOnly: true },
+    { label: 'Send NGN', prompt: 'Send 5000 NGN to ', fillOnly: true },
+    { label: 'Send KES', prompt: 'Send 500 KES to ', fillOnly: true },
+    { label: 'Balance', prompt: 'What is my current balance?', fillOnly: false },
+    { label: 'NGN Rate', prompt: 'What is the current NGN exchange rate?', fillOnly: false },
+    { label: 'Help', prompt: 'What are your capabilities?', fillOnly: false },
 ];
 
 const spring = { type: 'spring', damping: 22, stiffness: 300 };
@@ -50,7 +51,7 @@ const App: React.FC = () => {
     const agent = useAgent();
 
     const [view, setView] = useState<'chat' | 'dashboard'>('chat');
-    const [messages, setMessages] = useState<Message[]>([{ id: '1', text: "👋 Hey there! I'm CRIA, your friendly Celo finance buddy. \n\nI can help you send money globally in seconds, remember your favorite contacts, and even save you a ton on fees! \n\nHow can I help you today? ✨", sender: 'agent', status: 'info', provider: 'gemini' }]);
+    const [messages, setMessages] = useState<Message[]>([{ id: '1', text: "Welcome to CRIA.\n\nI am your Celo financial agent, equipped to handle stablecoin transfers, fiat off-ramps, and cross-chain bridging efficiently.\n\nHow may I assist with your transactions today?", sender: 'agent', status: 'info', provider: 'gemini' }]);
     const [input, setInput] = useState('');
     const [isTyping, setIsTyping] = useState(false);
     const [isDarkMode, setIsDarkMode] = useState(true);
@@ -68,10 +69,10 @@ const App: React.FC = () => {
     const containerRef = useRef<HTMLDivElement>(null);
 
     const TOUR_STEPS = [
-        { id: 'tour-wallet', title: 'Connect Your Wallet', content: 'First things first! Connect your Celo wallet to start sending funds globally.', position: 'bottom' },
-        { id: 'tour-view-toggle', title: 'Dashboard & Chat', content: 'Switch between the AI Chat and your personal Dashboard to see your stats.', position: 'bottom' },
-        { id: 'tour-actions', title: 'Quick Actions', content: 'Use these shortcuts to check rates or start a transfer with one tap.', position: 'top' },
-        { id: 'tour-input', title: 'Talk to CRIA', content: 'Just say "Send 10 to Mom" or "NGN rate". CRIA understands natural language!', position: 'top' },
+        { id: 'tour-wallet', title: 'Initialize Session', content: 'Connect your Web3 wallet to securely authenticate and enable transaction capabilities.', position: 'bottom' },
+        { id: 'tour-view-toggle', title: 'Analytics Dashboard', content: 'Toggle to the dashboard to monitor your on-chain agent identity (ERC-8004) and transaction logs.', position: 'bottom' },
+        { id: 'tour-actions', title: 'Action Shortcuts', content: 'Execute common workflows instantly, including cross-chain bridging and local fiat off-ramps.', position: 'top' },
+        { id: 'tour-input', title: 'Natural Language Execution', content: 'Command complex financial operations using plain text (e.g., "Bridge 50 USDC to Base" or "Withdraw NGN").', position: 'top' },
     ];
 
     useEffect(() => {
@@ -229,7 +230,8 @@ const App: React.FC = () => {
         if (!text.trim() || isTyping) return;
 
         setMessages(prev => [...prev, { id: Date.now().toString(), text, sender: 'user' }]);
-        if (!customText) setInput('');
+        setInput('');
+        setIsTyping(true);
 
         if (!isConnected) {
             setTimeout(() => setMessages(prev => [...prev, {
@@ -305,6 +307,7 @@ const App: React.FC = () => {
     };
 
     const rank = (() => {
+        if (agentId) return { label: `REGISTRY #${agentId}`, color: 'text-celo-green font-black' };
         const c = history.length;
         if (c > 20) return { label: 'DIAMOND', color: 'text-cyan-400' };
         if (c > 10) return { label: 'GOLD', color: 'text-celo-gold' };
@@ -348,14 +351,14 @@ const App: React.FC = () => {
                             </div>
                             <h2 className="text-[22px] font-black tracking-tight mb-1">Welcome to CRIA</h2>
                             <p className={`text-[13px] leading-relaxed mb-6 ${dark ? 'text-white/50' : 'text-gray-500'}`}>
-                                The fastest way to move money on Celo. Just talk to it.
+                                The intelligent router for stablecoin flows, cross-chain bridging, and real-world fiat off-ramps.
                             </p>
                             <div className="space-y-3 mb-7">
                                 {[
-                                    { icon: <Zap size={12} className="text-celo-green" />, label: 'Natural language payments' },
-                                    { icon: <Globe size={12} className="text-celo-green" />, label: 'Live exchange rates' },
-                                    { icon: <ShieldCheck size={12} className="text-celo-green" />, label: 'ERC-8004 agent identity' },
-                                    { icon: <CheckCircle2 size={12} className="text-celo-green" />, label: '~5 second settlement' },
+                                    { icon: <Zap size={12} className="text-celo-green" />, label: 'Natural Language Execution' },
+                                    { icon: <Globe size={12} className="text-celo-green" />, label: 'Cross-chain Bridging & Off-ramps' },
+                                    { icon: <ShieldCheck size={12} className="text-celo-green" />, label: 'ERC-8004 Agent Identity' },
+                                    { icon: <CheckCircle2 size={12} className="text-celo-green" />, label: 'Sub-second Finality on Celo' },
                                 ].map((f, i) => (
                                     <div key={i} className={`flex items-center gap-3 text-[13px] font-semibold ${dark ? 'text-white/80' : 'text-gray-700'}`}>
                                         <div className="w-6 h-6 rounded-lg bg-celo-green/15 flex items-center justify-center">{f.icon}</div>
@@ -390,14 +393,6 @@ const App: React.FC = () => {
                     <div>
                         <div className="flex items-center gap-2">
                             <span className="text-[16px] font-black tracking-tight">CRIA <span className="text-celo-green">PRO</span></span>
-                            {agentId && (
-                                <motion.span
-                                    initial={{ scale: 0 }} animate={{ scale: 1 }}
-                                    className="text-[9px] font-black px-1.5 py-0.5 rounded-md bg-celo-green/20 text-celo-green border border-celo-green/30"
-                                >
-                                    #{agentId}
-                                </motion.span>
-                            )}
                         </div>
                         <div className="flex items-center gap-1.5 mt-0.5">
                             <span className={`w-1.5 h-1.5 rounded-full glow-dot ${isConnected ? 'bg-celo-green' : 'bg-amber-400'}`} />
@@ -481,7 +476,7 @@ const App: React.FC = () => {
                                                 </div>
                                             )}
 
-                                            <p className={`text-[13.5px] leading-relaxed whitespace-pre-line font-medium ${m.sender === 'user' ? 'text-white' : dark ? 'text-white/90' : 'text-gray-900'}`}>
+                                            <p className={`text-[13.5px] leading-relaxed whitespace-pre-line font-medium break-words overflow-wrap-anywhere ${m.sender === 'user' ? 'text-white' : dark ? 'text-white/90' : 'text-gray-900'}`}>
                                                 {m.text}
                                             </p>
 
@@ -552,53 +547,72 @@ const App: React.FC = () => {
                                             handleSend(a.prompt);
                                         }
                                     }} disabled={isTyping}
-                                        className={`whitespace-nowrap px-3.5 py-2 rounded-full text-[11px] font-semibold border transition-all active:scale-95 disabled:opacity-40 ${dark ? 'bg-white/5 border-white/8 text-white/70 hover:bg-white/10' : 'bg-white/80 border-gray-200 text-gray-600 hover:bg-white'}`}>
+                                        className={`whitespace-nowrap px-3.5 py-2 rounded-full text-[11px] font-semibold border transition-all active:scale-95 disabled:opacity-40 ${
+                                            dark ? 'bg-white/5 border-white/8 text-white/70 hover:bg-white/10' : 'bg-white/80 border-gray-200 text-gray-600 hover:bg-white'
+                                        }`}>
                                         {a.label}
                                     </button>
                                 ))}
                             </div>
                         </div>
 
-                        {/* Input */}
-                        <footer id="tour-input" className={`px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))] backdrop-blur-xl ${dark ? 'bg-[#080B12]/80' : 'bg-[#EEF1F6]/80'}`}>
-                            <div className="flex gap-2">
+                        {/* Input Footer */}
+                        <footer id="tour-input" className={`px-4 pt-3 pb-[max(16px,env(safe-area-inset-bottom))] relative transition-all duration-500 ${dark ? 'bg-[#080B12]/95 border-t border-white/5' : 'bg-white border-t border-gray-200'}`}>
+                            {/* Decorative gradient blur */}
+                            <div className={`absolute -top-12 inset-x-0 h-12 pointer-events-none transition-opacity duration-500 ${dark ? 'bg-gradient-to-t from-[#080B12] to-transparent opacity-100' : 'bg-gradient-to-t from-white to-transparent opacity-60'}`} />
 
-                                <input
-                                    type="text"
-                                    value={input}
-                                    onChange={(e) => setInput(e.target.value)}
-                                    onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-                                    placeholder={isListening ? "Listening..." : "Tell CRIA what to do... (e.g. 'Hi!') "}
-                                    className="flex-1 bg-white/5 border border-white/10 rounded-2xl px-4 py-3 text-white placeholder:text-white/20 focus:outline-none focus:ring-2 focus:ring-yellow-500/50"
-                                    disabled={isTyping}
-                                />
-                                <button
-                                    onClick={startSpeechRecognition}
-                                    disabled={isTyping}
-                                    className={`p-3 rounded-2xl transition-all shadow-md ${
-                                        isListening ? 'bg-red-500 text-white' : 'bg-white/5 border border-white/10 text-white/40 hover:text-white/80'
-                                    }`}
-                                >
-                                    {isListening ? (
-                                        <div className="relative">
-                                            <MicOff size={20} />
-                                            <span className="absolute -inset-1 rounded-full border-2 border-white/20 animate-ping" />
-                                        </div>
-                                    ) : (
-                                        <Mic size={20} />
-                                    )}
-                                </button>
-                                <button
+                            <div className="flex gap-2 items-center relative">
+                                <div className={`flex-1 flex items-center gap-3 px-4 py-3.5 rounded-2xl transition-all duration-300 border focus-within:ring-2 focus-within:ring-celo-gold/30 ${
+                                    dark 
+                                        ? 'bg-white/5 border-white/10 text-white focus-within:bg-white/8' 
+                                        : 'bg-gray-50 border-gray-200 text-gray-900 focus-within:bg-white focus-within:border-celo-gold/50'
+                                } shadow-inner`}>
+                                    <Bot size={18} className={dark ? 'text-white/20' : 'text-gray-400'} />
+                                    <input
+                                        type="text"
+                                        value={input}
+                                        onChange={(e) => setInput(e.target.value)}
+                                        onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+                                        placeholder={isListening ? "Listening..." : "Message CRIA..."}
+                                        className={`flex-1 bg-transparent border-none focus:outline-none text-[14px] font-medium leading-none ${
+                                            dark ? 'placeholder:text-white/20' : 'placeholder:text-gray-400'
+                                        }`}
+                                        disabled={isTyping}
+                                    />
+                                    <button
+                                        onClick={startSpeechRecognition}
+                                        disabled={isTyping}
+                                        className={`p-1.5 rounded-lg transition-all ${
+                                            isListening ? 'text-red-500 animate-pulse' : dark ? 'text-white/20 hover:text-white/60' : 'text-gray-400 hover:text-gray-600'
+                                        }`}
+                                    >
+                                        {isListening ? <MicOff size={18} /> : <Mic size={18} />}
+                                    </button>
+                                </div>
+
+                                <motion.button
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
                                     onClick={() => handleSend()}
                                     disabled={!input.trim() || isTyping}
-                                    className="bg-yellow-500 hover:bg-yellow-400 disabled:opacity-50 disabled:cursor-not-allowed text-black p-3 rounded-2xl transition-all shadow-lg shadow-yellow-500/20"
+                                    className={`p-4 rounded-2xl transition-all shadow-xl flex items-center justify-center ${
+                                        !input.trim() || isTyping
+                                            ? dark ? 'bg-white/5 text-white/20' : 'bg-gray-100 text-gray-300'
+                                            : 'bg-gradient-to-br from-celo-gold to-amber-500 text-white shadow-celo-gold/25'
+                                    }`}
                                 >
                                     {isTyping ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
-                                </button>
+                                </motion.button>
                             </div>
-                            <p className={`text-center text-[9px] font-bold uppercase tracking-widest mt-2 ${dark ? 'text-white/20' : 'text-gray-300'}`}>
-                                Encrypted · Celo L2 · ERC-8004
-                            </p>
+                            <div className="flex justify-center items-center gap-6 mt-3">
+                                <p className={`text-[9px] font-black uppercase tracking-[0.15em] transition-colors duration-500 ${dark ? 'text-white/15' : 'text-gray-300'}`}>
+                                    L2 Settlements · Encrypted
+                                </p>
+                                <div className={`flex items-center gap-1 text-[9px] font-black uppercase tracking-[0.15em] transition-colors duration-500 ${dark ? 'text-white/15' : 'text-gray-300'}`}>
+                                    <ShieldCheck size={10} />
+                                    ERC-8004 Verified
+                                </div>
+                            </div>
                         </footer>
                     </motion.div>
 
@@ -643,6 +657,7 @@ const App: React.FC = () => {
                                             { label: 'Agent Wallet', value: `${AGENT_TREASURY.slice(0, 10)}...${AGENT_TREASURY.slice(-6)}` },
                                             { label: 'Agent ID', value: agentId ? `#${agentId}` : 'Registered', valueClass: 'text-celo-green font-black text-lg' },
                                             { label: 'Status', value: 'ACTIVE', valueClass: 'text-celo-green font-black tracking-wider' },
+                                            { label: 'AgentVault', value: DecentralizedMemory.getActiveCID() ? `ipfs://${DecentralizedMemory.getActiveCID()?.slice(0,10)}...` : 'IPFS Node Initialized', valueClass: 'text-blue-400 font-mono text-[10px]' },
                                         ].map((row, i) => (
                                             <div key={i} className={`flex justify-between items-center py-3 ${i < 2 ? `border-b ${dark ? 'border-white/6' : 'border-gray-100'}` : ''}`}>
                                                 <span className={`text-[9px] font-black uppercase tracking-[0.18em] ${dark ? 'text-white/35' : 'text-gray-400'}`}>{row.label}</span>

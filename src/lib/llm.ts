@@ -52,15 +52,49 @@ function parseIntentWithRegex(userInput: string): ParsedIntent | null {
     };
   }
 
-  // Send intent
-  const sendRegex = /send\s+([\d.]+)\s+(\w+)\s+to\s+([\w\s]+)/i;
+  // Send intent (could be regular send OR off-ramp if fiat)
+  const sendRegex = /send\s+([\d.]+)\s+(\w+)\s+to\s+([\w\s+-]+)/i;
   const sendMatch = userInput.match(sendRegex);
   if (sendMatch) {
+    const amt = sendMatch[1];
+    const curr = sendMatch[2].toUpperCase();
+    const recip = sendMatch[3].trim();
+    
+    // If it's a fiat currency (phonetic or real), pivot to out_ramp
+    const fiatKeywords = ['NGN', 'NAIRA', 'NIARA', 'NARRA', 'KES', 'GHS', 'EUR', 'GBP'];
+    if (fiatKeywords.includes(curr) || recip.toLowerCase().includes('acct') || recip.toLowerCase().includes('account')) {
+        // Extract account details from the remaining string if possible
+        const accMatch = recip.match(/(?:acct|account)\s*(?:number)?\s*(\d{10,15})/i);
+        const bankMatch = recip.match(/bank\s*(?:name)?\s*(.*?)(?=\s+name\s+|\s+acct\s+|\s+account\s+|$)/i);
+        let nameMatch = recip.match(/name\s*(?:of)?\s*(?:the)?\s*(?:acct|account)?\s*(?:holder)?\s*(.*?)(?=\s+bank\s+|\s+acct\s+|\s+account\s+|$)/i);
+        
+        let accountName = nameMatch ? nameMatch[1].trim() : null;
+        
+        // Fallback: If no explicit 'name' keyword, the name might be at the start of recip (e.g. "Send 5 to John bank...")
+        if (!accountName) {
+            const nameFallback = recip.match(/^(.*?)(?=\s+bank\s+|\s+acct\s+|\s+account\s+|$)/i);
+            if (nameFallback && nameFallback[1].trim()) {
+                accountName = nameFallback[1].trim();
+            }
+        }
+
+        return {
+            intentType: 'out_ramp',
+            amount: amt,
+            currency: curr === 'NIARA' || curr === 'NARRA' ? 'NGN' : curr,
+            recipient: null,
+            targetCurrency: curr === 'NIARA' || curr === 'NARRA' ? 'NGN' : curr,
+            accountNumber: accMatch ? accMatch[1] : null,
+            bankName: bankMatch ? bankMatch[1].trim() : null,
+            accountName: accountName
+        };
+    }
+
     return {
       intentType: 'send',
-      amount: sendMatch[1],
-      currency: sendMatch[2].toUpperCase(),
-      recipient: sendMatch[3].trim(),
+      amount: amt,
+      currency: curr,
+      recipient: recip,
       targetCurrency: null,
     };
   }
@@ -77,6 +111,20 @@ function parseIntentWithRegex(userInput: string): ParsedIntent | null {
     const currencies = ['NGN', 'KES', 'GHS', 'GBP', 'EUR', 'USD'];
     const foundCurrency = currencies.find(c => lower.includes(c.toLowerCase())) || null;
     return { intentType: 'get_rate', amount: null, currency: null, recipient: null, targetCurrency: foundCurrency };
+  }
+
+  // Off-ramp intent
+  const rampKeywords = ['withdraw', 'off-ramp', 'offramp', 'transfer to bank', 'cash out'];
+  const rampMatch = userInput.match(/(?:withdraw|off-ramp|offramp|transfer to bank|cash out)\s+([\d.]+)\s+(\w+)/i);
+  
+  if (rampMatch || rampKeywords.some(k => lower.includes(k))) {
+    return {
+      intentType: 'out_ramp',
+      amount: rampMatch ? rampMatch[1] : null,
+      currency: rampMatch ? rampMatch[2].toUpperCase() : null,
+      recipient: null,
+      targetCurrency: null,
+    };
   }
 
   // Help / Greeting
@@ -96,12 +144,15 @@ export async function getResilientIntent(userInput: string): Promise<ResilientIn
         messages: [{
           role: "system",
           content: `You are a remittance agent AI. Analyze user messages and return a JSON object with:
-- intentType: "send" | "check_balance" | "get_rate" | "help" | "save_contact" | "unknown"
-- amount: string or null (for send)
+- intentType: "send" | "batch_send" | "out_ramp" | "check_balance" | "get_rate" | "help" | "save_contact" | "unknown"
+- amount: string or null
 - currency: "USDC" | "cUSD" or fiat codes or null
 - recipient: "0x..." address OR a name like "Mom" or null
-- targetCurrency: fiat currency code or null (for get_rate)
-- contactName: name to save or null (for save_contact)`
+- targetCurrency: fiat currency code or null (for get_rate or out_ramp)
+- contactName: name to save or null (for save_contact)
+- accountNumber: 10-digit bank account number or null (for out_ramp)
+- bankName: name of the bank or null (for out_ramp)
+- accountName: full name of account holder or null (for out_ramp)`
         }, {
           role: "user",
           content: userInput

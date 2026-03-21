@@ -8,13 +8,13 @@ export const mainnet = celo;
 export const STABLECOINS_BY_CHAIN: Record<number, { cUSD: string; USDC: string }> = {
   // Celo Mainnet (42220)
   42220: {
-    cUSD: '0x765DE816845861e75A25fCA122bb6898B8B1282a',
-    USDC: '0xcebA9300f2b948710d2653dD7B07f33A8B32118C',
+    cUSD: '0x765de816845861e75a25fca122bb6898b8b1282a',
+    USDC: '0xceba9300f2b948710d2653dd7b07f33a8b32118c',
   },
   // Celo Sepolia (44787)
   44787: {
-    cUSD: '0xEF4d55D6dE8e8d73232827Cd1e9b2F2dBb45bC80',
-    USDC: '0x01C5C0122039549Ad1493B8220cABEdD739BC44E',
+    cUSD: '0xef4d55d6de8e8d73232827cd1e9b2f2dbb45bc80',
+    USDC: '0x01c5c0122039549ad1493b8220cabedd739bc44e',
   },
 };
 
