@@ -47,7 +47,7 @@ export async function generateConversationalReply(userInput: string): Promise<st
     return data.reply;
   } catch (error: any) {
     console.error('Conversational reply failed:', error);
-    return `Brain Error: ${error.message} · 😅`;
+    return "I'm having a little trouble connecting to my brain, but I'm still here to help! 😅";
   }
 }
 
