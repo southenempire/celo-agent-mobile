@@ -12,6 +12,7 @@ import { useAppKit } from '@reown/appkit/react';
 import { useAgent } from './hooks/useAgent';
 import { registerAgentOnChain, formatAgentRegistry, ERC8004_REGISTRY_MAINNET, ERC8004_REGISTRY_SEPOLIA, ERC8004_ABI } from './lib/erc8004';
 import { type TransactionHistory, AGENT_TREASURY } from './lib/agent-core';
+import { Analytics } from '@vercel/analytics/react';
 
 interface Message {
     id: string;
@@ -815,6 +816,7 @@ const App: React.FC = () => {
                     </div>
                 )}
             </AnimatePresence>
+            <Analytics />
         </div>
     );
 };
