@@ -17,7 +17,10 @@ export async function getResilientIntent(userInput: string): Promise<ResilientIn
       body: JSON.stringify({ userInput }),
     });
 
-    if (!response.ok) throw new Error('Backend failed');
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({ error: 'Unknown backend error' }));
+      throw new Error(errData.error || 'Backend failed');
+    }
     const data = await response.json();
     return { intent: data.intent, provider: data.provider };
   } catch (error) {
@@ -36,12 +39,15 @@ export async function generateConversationalReply(userInput: string): Promise<st
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userInput, mode: 'reply' }),
     });
-    if (!response.ok) throw new Error('Backend failed');
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({ error: 'Unknown backend error' }));
+      throw new Error(errData.error || 'Backend failed');
+    }
     const data = await response.json();
     return data.reply;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Conversational reply failed:', error);
-    return "I'm having a little trouble connecting to my brain, but I'm still here to help! 😅";
+    return `Brain Error: ${error.message} · 😅`;
   }
 }
 
