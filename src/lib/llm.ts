@@ -23,9 +23,9 @@ export async function getResilientIntent(userInput: string): Promise<ResilientIn
     }
     const data = await response.json();
     return { intent: data.intent, provider: data.provider };
-  } catch (error) {
-    console.error('Secure backend failed:', error);
-    return { 
+  } catch (error: any) {
+    console.error('Intent parsing failed:', error);
+    return {
       intent: { intentType: 'unknown', amount: null, currency: null, recipient: null, targetCurrency: null },
       provider: 'regex'
     };
