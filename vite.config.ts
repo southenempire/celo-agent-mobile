@@ -41,7 +41,7 @@ export default defineConfig({
                 ]
             },
             workbox: {
-                maximumFileSizeToCacheInBytes: 4000000 // Increase to 4MB for larger bundles
+                maximumFileSizeToCacheInBytes: 10000000 // Increase to 10MB for larger bundles
             }
         })
     ],

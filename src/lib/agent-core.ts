@@ -25,9 +25,9 @@ export interface AgentResult {
     intent: ParsedIntent;
     provider: AIProvider;
     feeHash?: string;
-    // For non-send intents
     replyText?: string;
     balances?: { cUSD: string; USDC: string };
+    chiRef?: string;
     rate?: { currency: string; rate: string; formatted: string };
     comparison?: FeeComparison;
 }
@@ -57,16 +57,16 @@ export class CeloAgent {
     }
 
     async checkBalance(address: `0x${string}`): Promise<{ cUSD: string; USDC: string }> {
-        const stablecoins = this.stablecoins;
+        const scArr = this.stablecoins;
         const [cUSDBalance, USDCBalance] = await Promise.all([
             this.publicClient.readContract({
-                address: stablecoins.cUSD as `0x${string}`,
+                address: scArr.cUSD as `0x${string}`,
                 abi: erc20Abi,
                 functionName: 'balanceOf',
                 args: [address],
             }),
             this.publicClient.readContract({
-                address: stablecoins.USDC as `0x${string}`,
+                address: scArr.USDC as `0x${string}`,
                 abi: erc20Abi,
                 functionName: 'balanceOf',
                 args: [address],
@@ -150,6 +150,9 @@ export class CeloAgent {
         switch (intent.intentType) {
             case 'out_ramp':
                 return this.handleOutRamp(input, intent, provider);
+
+            case 'check_status':
+                return (this as any).handleCheckStatus(input, intent, provider);
             case 'check_balance':
                 return this.handleBalanceCheck(intent, provider);
 
@@ -286,6 +289,7 @@ export class CeloAgent {
                     return {
                         intent: intent!,
                         provider: provider!,
+                        chiRef: result.transactionId,
                         replyText: `Transfer initiated successfully!\n\nYour ${session.amount} ${session.currency} is securely en route to ${session.accountName} at ${session.bankName}.\n\nTransaction ID: \`${result.transactionId}\`\nStatus: Settlement in progress (~5 mins).`
                     };
                 } else {
@@ -401,11 +405,26 @@ export class CeloAgent {
         } catch (e) {
             console.error("Failed to pin to IPFS", e);
         }
-
+        
         return {
             intent,
             provider,
             replyText: `Contact saved to AgentVault.\n\nI will remember **${name}** as ${address.slice(0, 6)}...${address.slice(-4)}.\n\n*(Memory synced to Filecoin/IPFS distributed storage)*.`
+        };
+    }
+    
+    private async handleCheckStatus(input: string, intent: ParsedIntent, provider: AIProvider): Promise<AgentResult> {
+        const chiRef = intent.transactionId || input.match(/cm-\d+/)?.[0] || input.match(/chi-[a-zA-Z0-9]+/)?.[0];
+        if (!chiRef) {
+            throw new Error("I need a Transaction ID (chiRef) to check the status. Example: 'Status of cm-123456789'");
+        }
+        
+        const result = await PayoutService.getPayoutStatus(chiRef);
+        return {
+            intent,
+            provider,
+            chiRef,
+            replyText: `🔍 **System Verification**\n\n${result.message}\n\nTransaction: \`${chiRef}\`\nAPI Provider: Chimoney Pro`
         };
     }
 
@@ -414,34 +433,57 @@ export class CeloAgent {
             throw new Error("I need an amount and a recipient. Try: 'Send 5 USDC to 0x...' or 'Send 10 to Mom'");
         }
 
-            // --- Outbound Bridging Check (Phase 7 Refinement) ---
-            // Detect cross-chain addresses (Solana, Base, etc.) by length/format
-            const isCeloAddress = /^0x[a-fA-F0-9]{40}$/.test(intent.recipient || '');
-            const looksLikeCrossChain = /^[a-zA-Z0-9]{30,50}$/.test(intent.recipient || '');
+        const stablecoins = this.stablecoins;
 
-            if (intent.recipient && looksLikeCrossChain && !isCeloAddress) {
-                try {
-                    const quote = await BridgeService.getBridgeQuote({
-                        fromChain: "42220", // Celo
-                        toChain: "solana",
-                        fromToken: "CELO-USDC", 
-                        toToken: "SOL-USDC",
-                        fromAmount: (parseFloat(intent.amount || "0") * 10**6).toString(),
-                        fromAddress: this.walletClient.account?.address, // user Celo address
-                        toAddress: intent.recipient
-                    });
+        // --- Inbound Bridging Check (Phase 7) ---
+        // If funds are coming from another chain, handle it first
+        if (intent.sourceChain && intent.sourceChain !== 'Celo') {
+            const bridgeResult = await BridgeService.getBridgeQuote({
+                fromChain: intent.sourceChain,
+                toChain: 'Celo',
+                fromToken: 'USDC', 
+                toToken: 'USDC',
+                fromAmount: parseUnits(intent.amount, 6).toString(), 
+                fromAddress: this.walletClient.account?.address || '0x...',
+                toAddress: this.walletClient.account?.address || '0x...'
+            });
 
-                    if (quote.success) {
-                        return {
-                            intent,
-                            provider,
-                            replyText: `🦑 **Cross-chain Transfer Detected!** \n\nI'll use **Squid Router** to bridge your funds from **Celo** to **Solana** 'under-the-hood'.\n\n${quote.message}\n\nShall I proceed with this cross-chain send?`
-                        };
-                    }
-                } catch (e) {
-                    console.error("[BridgeService] Outbound quote failed", e);
+            return {
+                intent,
+                provider,
+                replyText: `🌉 **Bridging Initiated from ${intent.sourceChain}!**\n\n${bridgeResult.message || "Searching for the best route via Squid..."}\n\nI'll handle the move to Celo in the background. Once the funds arrive, I'll complete your request! 🤝`
+            };
+        }
+
+        // --- Outbound Bridging Check (Phase 7 Refinement) ---
+        // Detect cross-chain addresses (Solana, Base, etc.) by length/format
+        const isCeloAddress = /^0x[a-fA-F0-9]{40}$/.test(intent.recipient || '');
+        const looksLikeCrossChain = /^[a-zA-Z0-9]{30,50}$/.test(intent.recipient || '');
+
+        if (intent.recipient && looksLikeCrossChain && !isCeloAddress) {
+            try {
+                const quote = await BridgeService.getBridgeQuote({
+                    fromChain: "42220", // Celo
+                    toChain: "solana",
+                    fromToken: "CELO-USDC", 
+                    toToken: "SOL-USDC",
+                    fromAmount: (parseFloat(intent.amount || "0") * 10**6).toString(),
+                    fromAddress: this.walletClient.account?.address, 
+                    toAddress: intent.recipient
+                });
+
+                if (quote.success) {
+                    return {
+                        intent,
+                        provider,
+                        replyText: `🦑 **Cross-chain Transfer Detected!** \n\nI'll use **Squid Router** to bridge your funds from **Celo** to **Solana** 'under-the-hood'.\n\n${quote.message}\n\nShall I proceed with this cross-chain send?`
+                    };
                 }
+            } catch (e) {
+                console.error("[BridgeService] Outbound quote failed", e);
             }
+        }
+
         let recipientAddress = intent.recipient;
         const isEnsName = recipientAddress.endsWith('.eth') || recipientAddress.endsWith('.celo');
 
@@ -451,8 +493,10 @@ export class CeloAgent {
             if (resolved) {
                 recipientAddress = resolved;
             } else if (/^\+?\d{10,15}$/.test(recipientAddress)) {
-                // If it looks like a bank account number or phone number, pivot to out_ramp flow
                 return this.handleOutRamp(input, { ...intent, intentType: 'out_ramp', accountNumber: recipientAddress }, provider);
+            } else if (looksLikeCrossChain) {
+                // Allow the address to pass through if it's a valid cross-chain format
+                // Transaction would still fail later if not on Celo, but it won't throw "Recipient not found"
             } else {
                 throw new Error(`Recipient "${recipientAddress}" not found in AgentVault or ENS Registry.\n\nYou can map this name to an address by saying "Remember 0x... as ${recipientAddress}".`);
             }
@@ -473,7 +517,6 @@ export class CeloAgent {
         }
 
         let conversionMsg = '';
-        const stablecoins = this.stablecoins;
 
         // Check if intent currency is a fiat currency we support for conversion
         const fiatCurrencies = ['NGN', 'KES', 'GHS', 'GBP', 'EUR', 'USD'];
@@ -502,10 +545,20 @@ export class CeloAgent {
 
         // Handle invisible bridging
         if (intent.sourceChain && intent.sourceChain !== 'Celo') {
+            const bridgeResult = await BridgeService.getBridgeQuote({
+                fromChain: intent.sourceChain,
+                toChain: 'Celo',
+                fromToken: 'USDC', // Assume USDC for demo, or map from intent.currency
+                toToken: 'USDC',
+                fromAmount: parseUnits(amount, 6).toString(), // Assume USDC decimals 6 for source
+                fromAddress: this.walletClient.account?.address || '0x...',
+                toAddress: this.walletClient.account?.address || '0x...'
+            });
+
             return {
                 intent,
                 provider,
-                replyText: `Bridging Initiated.\nI am routing your ${amount} ${currency} to Celo from ${intent.sourceChain}.\n\nThis process happens seamlessly in the background. I will notify you upon settlement.`
+                replyText: `🌉 **Bridging Initiated from ${intent.sourceChain}!**\n\n${bridgeResult.message || "Searching for the best route via Squid..."}\n\nI'll handle the move to Celo in the background. Once the funds arrive, I'll complete your request! 🤝`
             };
         }
 
@@ -513,11 +566,11 @@ export class CeloAgent {
              return {
                 intent,
                 provider,
-                replyText: `Cross-chain Transfer Initiated.\nRouting ${amount} ${currency} from Celo to ${intent.targetChain}.\n\nThe bridge protocol is executing your request.`
+                replyText: `🚀 **Cross-chain Transfer to ${intent.targetChain}!**\n\nI'm prepping a Squid Router payload to move ${amount} ${currency} from Celo to **${intent.targetChain}**. \n\nEstimated time: ~3-5 minutes. The bridge is doing its magic... ✨`
             };
         }
 
-        const tokenAddress = (stablecoins as any)[currency] as `0x${string}`;
+        const tokenAddress = (this.stablecoins as any)[currency] as `0x${string}`;
         if (!tokenAddress) {
             throw new Error(`Unsupported currency: ${currency}. I support cUSD and USDC.`);
         }
@@ -590,8 +643,8 @@ export class CeloAgent {
         try {
             const currentBlock = await this.publicClient.getBlockNumber();
             const fromBlock = currentBlock > BigInt(50000) ? currentBlock - BigInt(50000) : BigInt(0);
-            const stablecoins = this.stablecoins;
-            const tokenAddresses = [stablecoins.cUSD as `0x${string}`, stablecoins.USDC as `0x${string}`];
+            const scArr = this.stablecoins;
+            const tokenAddresses = [scArr.cUSD as `0x${string}`, scArr.USDC as `0x${string}`];
 
             const [sentLogs, receivedLogs] = await Promise.all([
                 this.publicClient.getLogs({
@@ -629,8 +682,8 @@ export class CeloAgent {
             ]);
 
             const mapLog = (log: any, status: 'sent' | 'received'): TransactionHistory => {
-                const stablecoins = this.stablecoins;
-                const currency = log.address.toLowerCase() === stablecoins.cUSD.toLowerCase() ? 'cUSD' : 'USDC';
+                const scArr = this.stablecoins;
+                const currency = log.address.toLowerCase() === scArr.cUSD.toLowerCase() ? 'cUSD' : 'USDC';
                 const decimals = DECIMALS[currency] || 18;
                 const amount = (Number(log.args.value) / Math.pow(10, decimals)).toFixed(4);
                 return {

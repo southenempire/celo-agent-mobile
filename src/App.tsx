@@ -3,14 +3,14 @@ import {
     Send, Wallet, Loader2, Link as LinkIcon,
     LayoutDashboard, MessageSquare, ArrowUpRight, ArrowDownLeft,
     Coins, BarChart3, ChevronRight, Sun, Moon, Info,
-    ShieldCheck, Zap, CheckCircle2, Clock, Globe, RefreshCw, Bot, Sparkles,
+    ShieldCheck, Zap, CheckCircle2, Clock, Globe, RefreshCw, Bot, Sparkles, Edit,
     Copy, ExternalLink, Trophy, Flame, History, RefreshCcw, Users, TrendingUp, Mic, MicOff, X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAccount, useChainId, useWalletClient, usePublicClient } from 'wagmi';
 import { useAppKit } from '@reown/appkit/react';
 import { useAgent } from './hooks/useAgent';
-import { registerAgentOnChain, formatAgentRegistry, ERC8004_REGISTRY_MAINNET, ERC8004_REGISTRY_SEPOLIA, ERC8004_ABI } from './lib/erc8004';
+import { registerAgentOnChain, ERC8004_REGISTRY_MAINNET, ERC8004_REGISTRY_SEPOLIA, ERC8004_ABI } from './lib/erc8004';
 import { type TransactionHistory, AGENT_TREASURY } from './lib/agent-core';
 import { DecentralizedMemory } from './lib/decentralized-memory';
 
@@ -21,6 +21,7 @@ interface Message {
     status?: 'pending' | 'success' | 'error' | 'initiating' | 'broadcasting' | 'securing' | 'info';
     hash?: string;
     provider?: string;
+    agentResult?: import('./lib/agent-core').AgentResult;
 }
 
 const QUICK_ACTIONS = [
@@ -229,7 +230,8 @@ const App: React.FC = () => {
         const text = customText || input;
         if (!text.trim() || isTyping) return;
 
-        setMessages(prev => [...prev, { id: Date.now().toString(), text, sender: 'user' }]);
+        const userMsgId = `user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        setMessages(prev => [...prev, { id: userMsgId, text, sender: 'user' }]);
         setInput('');
         setIsTyping(true);
 
@@ -243,23 +245,37 @@ const App: React.FC = () => {
         }
 
         if (!agent) return;
-        setIsTyping(true);
-        const agentMsgId = (Date.now() + 1).toString();
-
+        const agentMsgId = `agent-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+        
         try {
-            setMessages(prev => [...prev, { id: agentMsgId, text: "Analyzing intent...", sender: 'agent', status: 'initiating' }]);
-            const result = await agent.processIntent(text);
+            setMessages(prev => [...prev, { 
+                id: agentMsgId, 
+                text: "Analyzing your request...", 
+                sender: 'agent', 
+                status: 'initiating',
+                provider: 'regex'
+            }]);
 
+            const result = await agent.processIntent(text);
+            
             if (result.replyText) {
                 setIsTyping(false);
                 setMessages(prev => prev.map(m => m.id === agentMsgId ? {
-                    ...m, text: result.replyText!, status: result.hash ? 'success' : 'info', provider: result.provider, hash: result.hash
+                    ...m, 
+                    text: result.replyText!, 
+                    status: result.hash ? 'success' : 'info', 
+                    provider: result.provider, 
+                    hash: result.hash
                 } : m));
                 return;
             }
 
-            // Send flow steps
-            setMessages(prev => prev.map(m => m.id === agentMsgId ? { ...m, text: `Broadcasting to ${networkName}...`, status: 'broadcasting' } : m));
+            // For transaction flows, update the bubble to 'Broadcasting'
+            setMessages(prev => prev.map(m => m.id === agentMsgId ? { 
+                ...m,
+                text: `Broadcasting to ${networkName}...`, 
+                status: 'broadcasting' 
+            } : m));
             await new Promise(r => setTimeout(r, 1200));
             setMessages(prev => prev.map(m => m.id === agentMsgId ? { ...m, text: "Confirming on-chain...", status: 'securing' } : m));
             await new Promise(r => setTimeout(r, 800));
@@ -267,14 +283,9 @@ const App: React.FC = () => {
             setIsTyping(false);
             const { intent, hash, provider, comparison } = result;
 
-            let savingsText = '';
-            if (comparison && comparison.savings > 0) {
-                savingsText = `\n\n💰 **Celo Savings: $${comparison.savings}**\nCompared to Western Union ($${comparison.traditionalFee})`;
-            }
-
             setMessages(prev => prev.map(m => m.id === agentMsgId ? {
                 ...m,
-                text: `✅ Sent ${intent.amount} ${intent.currency || 'USDC'} to ${intent.recipient?.slice(0, 6)}...${intent.recipient?.slice(-4)}\nFee: 0.01 ${intent.currency || 'USDC'} · ~5s settlement${savingsText}`,
+                text: `✅ Sent ${intent.amount} ${intent.currency || 'USDC'} to ${intent.recipient?.slice(0, 6)}...${intent.recipient?.slice(-4)}\nFee: 0.01 ${intent.currency || 'USDC'} · ~5s settlement`,
                 status: 'success', hash, provider
             } : m));
         } catch (err: any) {
@@ -353,18 +364,29 @@ const App: React.FC = () => {
                             <p className={`text-[13px] leading-relaxed mb-6 ${dark ? 'text-white/50' : 'text-gray-500'}`}>
                                 The intelligent router for stablecoin flows, cross-chain bridging, and real-world fiat off-ramps.
                             </p>
-                            <div className="space-y-3 mb-7">
+                             <div className="space-y-4 mb-7">
                                 {[
-                                    { icon: <Zap size={12} className="text-celo-green" />, label: 'Natural Language Execution' },
-                                    { icon: <Globe size={12} className="text-celo-green" />, label: 'Cross-chain Bridging & Off-ramps' },
-                                    { icon: <ShieldCheck size={12} className="text-celo-green" />, label: 'ERC-8004 Agent Identity' },
-                                    { icon: <CheckCircle2 size={12} className="text-celo-green" />, label: 'Sub-second Finality on Celo' },
+                                    { icon: <Zap size={12} className="text-celo-green" />, title: 'Smart Payments', label: 'Send money using natural language.' },
+                                    { icon: <Globe size={12} className="text-celo-green" />, title: 'Invisible Bridge', label: 'Bridge from Solana/Base automatically.' },
+                                    { icon: <ShieldCheck size={12} className="text-celo-green" />, title: 'Agent ID', label: 'Verified on-chain via ERC-8004.' },
                                 ].map((f, i) => (
-                                    <div key={i} className={`flex items-center gap-3 text-[13px] font-semibold ${dark ? 'text-white/80' : 'text-gray-700'}`}>
-                                        <div className="w-6 h-6 rounded-lg bg-celo-green/15 flex items-center justify-center">{f.icon}</div>
-                                        {f.label}
+                                    <div key={i} className="flex gap-3">
+                                        <div className="w-8 h-8 rounded-xl bg-celo-green/10 flex-shrink-0 flex items-center justify-center text-celo-green">{f.icon}</div>
+                                        <div>
+                                            <p className={`text-[13px] font-black ${dark ? 'text-white' : 'text-gray-800'}`}>{f.title}</p>
+                                            <p className={`text-[11px] leading-tight ${dark ? 'text-white/40' : 'text-gray-500'}`}>{f.label}</p>
+                                        </div>
                                     </div>
                                 ))}
+                            </div>
+                            
+                            <div className={`mb-7 p-4 rounded-2xl border ${dark ? 'bg-white/5 border-white/5' : 'bg-gray-50 border-gray-100'}`}>
+                                <p className={`text-[10px] font-black uppercase tracking-widest mb-3 ${dark ? 'text-celo-green' : 'text-celo-green/80'}`}>Try these prompts:</p>
+                                <ul className="space-y-2">
+                                    {['"Send 5 USDC from Solana to Mom"', '"Withdraw 5000 NGN to my bank"', '"What is my cUSD balance?"'].map((p, i) => (
+                                        <li key={i} className={`text-[11px] font-bold ${dark ? 'text-white/60' : 'text-gray-600'}`}>{p}</li>
+                                    ))}
+                                </ul>
                             </div>
                             <button
                                 onClick={() => { 
@@ -449,14 +471,14 @@ const App: React.FC = () => {
                                             </div>
                                         )}
 
-                                        <div className={`max-w-[78%] relative rounded-2xl px-4 py-3 ${
+                                        <div className={`max-w-[78%] relative rounded-[20px] px-4 py-3 shadow-md ${
                                             m.sender === 'user'
-                                                ? 'bg-gradient-to-br from-celo-green to-emerald-500 text-white rounded-br-[6px] shadow-lg shadow-celo-green/20'
+                                                ? 'bg-gradient-to-br from-celo-green to-emerald-600 text-white rounded-br-[4px] shadow-celo-green/20 ml-auto'
                                                 : m.status === 'error'
-                                                    ? dark ? 'bg-red-500/12 border border-red-500/20 rounded-bl-[6px]' : 'bg-red-50 border border-red-200 rounded-bl-[6px]'
+                                                    ? dark ? 'bg-red-500/15 border border-red-500/20 rounded-bl-[4px]' : 'bg-red-50 border border-red-200 rounded-bl-[4px]'
                                                     : m.status === 'success'
-                                                        ? dark ? 'bg-celo-green/10 border border-celo-green/20 rounded-bl-[6px]' : 'bg-emerald-50 border border-emerald-300 rounded-bl-[6px]'
-                                                        : dark ? 'bg-white/6 border border-white/8 rounded-bl-[6px]' : 'bg-white border border-gray-200 rounded-bl-[6px] shadow-sm'
+                                                        ? dark ? 'bg-celo-green/12 border border-celo-green/20 rounded-bl-[4px]' : 'bg-emerald-50 border border-emerald-300 rounded-bl-[4px]'
+                                                        : dark ? 'bg-[#151B28] border border-white/10 rounded-bl-[4px]' : 'bg-slate-100 border border-slate-200 rounded-bl-[4px]'
                                         }`}>
 
                                             {/* Progress bar */}
@@ -480,7 +502,7 @@ const App: React.FC = () => {
                                                 {m.text}
                                             </p>
 
-                                            {(m.hash || m.provider) && (
+                                            {(m.hash || m.provider || (m.sender === 'agent' && m.status === 'info')) && (
                                                 <div className="flex flex-wrap items-center gap-1.5 mt-2">
                                                     {m.provider && (
                                                         <span className={`text-[9px] font-black uppercase tracking-[0.1em] px-1.5 py-0.5 rounded border ${
@@ -489,6 +511,30 @@ const App: React.FC = () => {
                                                             : 'text-gray-400 border-gray-400/20 bg-gray-400/8'}`}>
                                                             {m.provider}
                                                         </span>
+                                                    )}
+                                                    {m.sender === 'agent' && m.status === 'info' && m.text.includes('Ready to send') && (
+                                                        <button 
+                                                            onClick={() => {
+                                                                // Extract the figures context if possible, or just copy text to input
+                                                                const lines = m.text.split('\n');
+                                                                const amountLine = lines.find(l => l.includes('Amount:'));
+                                                                if (amountLine) {
+                                                                    setInput(`Change amount to ${amountLine.split(': ')[1]}`);
+                                                                } else {
+                                                                    setInput(m.text.split('\n')[0]); 
+                                                                }
+                                                                const el = document.querySelector('input[type="text"]') as HTMLInputElement;
+                                                                el?.focus();
+                                                            }}
+                                                            className="text-[10px] flex items-center gap-1 font-bold text-celo-gold bg-celo-gold/10 border border-celo-gold/25 px-2 py-0.5 rounded-full hover:bg-celo-gold/20 transition-all">
+                                                            <Edit size={9} /> Edit Request
+                                                        </button>
+                                                    )}
+                                                    {m.agentResult?.chiRef && (
+                                                        <button onClick={() => handleSend(`Verify status of ${m.agentResult?.chiRef}`)}
+                                                            className="text-[10px] flex items-center gap-1 font-bold text-green-400 bg-green-400/10 border border-green-400/25 px-2 py-0.5 rounded-full hover:bg-green-400/20 transition-all">
+                                                            <Loader2 size={9} className="animate-spin" /> Verify Status
+                                                        </button>
                                                     )}
                                                     {m.hash && (
                                                         <a href={`${explorerUrl}/tx/${m.hash}`} target="_blank" rel="noopener noreferrer"
@@ -604,15 +650,10 @@ const App: React.FC = () => {
                                     {isTyping ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
                                 </motion.button>
                             </div>
-                            <div className="flex justify-center items-center gap-6 mt-3">
-                                <p className={`text-[9px] font-black uppercase tracking-[0.15em] transition-colors duration-500 ${dark ? 'text-white/15' : 'text-gray-300'}`}>
-                                    L2 Settlements · Encrypted
-                                </p>
-                                <div className={`flex items-center gap-1 text-[9px] font-black uppercase tracking-[0.15em] transition-colors duration-500 ${dark ? 'text-white/15' : 'text-gray-300'}`}>
-                                    <ShieldCheck size={10} />
-                                    ERC-8004 Verified
-                                </div>
-                            </div>
+
+                            <p className={`text-center text-[9px] font-bold uppercase tracking-widest mt-2 ${dark ? 'text-white/20' : 'text-gray-300'}`}>
+                                Encrypted · Celo L2 · ENS · ERC-8004 · Self Protocol
+                            </p>
                         </footer>
                     </motion.div>
 
@@ -665,10 +706,21 @@ const App: React.FC = () => {
                                             </div>
                                         ))}
 
-                                        <div className="pt-4">
-                                            <div className={`flex items-center gap-2 text-[12px] font-semibold ${dark ? 'text-white/40' : 'text-gray-400'}`}>
-                                                <CheckCircle2 size={14} className="text-celo-green" />
-                                                Verified Identity · Discoverable on Celo
+                                        <div className="pt-4 space-y-3">
+                                            <div className={`p-4 rounded-2xl border ${dark ? 'bg-white/5 border-white/5' : 'bg-gray-50 border-gray-100'}`}>
+                                                <p className={`text-[10px] font-black uppercase tracking-widest mb-2 ${dark ? 'text-celo-green' : 'text-celo-green/80'}`}>Capabilities</p>
+                                                <div className="grid grid-cols-2 gap-2">
+                                                    {['Remittance', 'Bridging', 'ENS Mapping', 'DeFi Actions'].map(c => (
+                                                        <div key={c} className="flex items-center gap-2">
+                                                            <div className="w-1.5 h-1.5 rounded-full bg-celo-green" />
+                                                            <span className={`text-[10px] font-medium ${dark ? 'text-white/60' : 'text-gray-600'}`}>{c}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                            <div className={`flex items-center gap-2 text-[11px] font-semibold ${dark ? 'text-white/40' : 'text-gray-400'}`}>
+                                                <CheckCircle2 size={13} className="text-celo-green" />
+                                                Verified Identity · Fully Discoverable on-chain
                                             </div>
                                         </div>
                                     </div>

@@ -11,7 +11,7 @@ export interface PayoutResult {
 
 export class PayoutService {
     private static API_BASE = 'https://api.chimoney.io/v0.2.4';
-    private static API_KEY = import.meta.env.VITE_CHIMONEY_API_KEY || 'sandbox-key'; // Fallback to sandbox if not set
+    private static API_KEY = import.meta.env.VITE_CHIMONEY_API_KEY || 'sandbox-key';
 
     /**
      * Initiates a bank payout in Nigeria, Kenya, or Ghana.
@@ -26,8 +26,6 @@ export class PayoutService {
         try {
             console.log('[PayoutService] Initiating Chimoney payout:', params);
 
-            // Chimoney expects 'valueInUSD'. For the demo, we'll convert based on current market rates.
-            // (Rates are typically ~1600 NGN/USD, ~130 KES/USD)
             let valueInUSD = params.amount;
             if (params.currency === 'NGN') valueInUSD = Number((params.amount / 1600).toFixed(2));
             if (params.currency === 'KES') valueInUSD = Number((params.amount / 130).toFixed(2));
@@ -36,7 +34,7 @@ export class PayoutService {
                 banks: [
                     {
                         countryToSend: this.getCountryName(params.currency),
-                        account_bank: params.bankName, // Chimoney usually expects a code, but some providers accept name
+                        account_bank: params.bankName,
                         account_number: params.accountNumber,
                         valueInUSD,
                         fullname: params.accountName
@@ -73,6 +71,33 @@ export class PayoutService {
                 success: false,
                 message: error instanceof Error ? error.message : 'Unknown payout error'
             };
+        }
+    }
+
+    /**
+     * Checks the status of a payout using a transaction ID (chiRef)
+     */
+    static async getPayoutStatus(chiRef: string): Promise<{ status: string; message: string }> {
+        try {
+            const response = await fetch(`${this.API_BASE}/payouts/status`, {
+                method: 'POST',
+                headers: {
+                    'X-API-KEY': this.API_KEY,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ chiRef })
+            });
+
+            const data = await response.json();
+            if (data.status === 'success') {
+                return {
+                    status: data.data?.status || 'unknown',
+                    message: `Payout Status: ${data.data?.status || 'Processing'}`
+                };
+            }
+            return { status: 'error', message: data.message || 'Failed to fetch status' };
+        } catch (error) {
+            return { status: 'error', message: 'Status check failed' };
         }
     }
 

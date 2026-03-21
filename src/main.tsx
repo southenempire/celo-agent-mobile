@@ -1,3 +1,7 @@
+import { Buffer } from 'buffer'
+window.Buffer = Buffer
+window.process = { env: {} } as any
+
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { WagmiProvider } from 'wagmi'

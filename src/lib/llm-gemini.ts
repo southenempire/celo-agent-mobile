@@ -9,7 +9,7 @@ export async function parseIntentWithGemini(userInput: string) {
 
     const genAI = new GoogleGenerativeAI(apiKey);
     const model = genAI.getGenerativeModel({
-        model: "gemini-1.5-flash",
+        model: "gemini-1.5-flash-latest", 
         generationConfig: {
             responseMimeType: "application/json",
         }
@@ -81,7 +81,7 @@ export async function generateConversationalReply(userInput: string): Promise<st
     }
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
 
     const prompt = `You are CRIA, a friendly AI agent for fast remittances on the Celo blockchain. 
 The user said: "${userInput}"

@@ -1,6 +1,14 @@
 # CRIA: Celo Remittance Intent Agent 🌳
 
-CRIA is a production-grade, mobile-first financial agent designed to execute complex DeFi operations through deterministic natural language parsing. By leveraging the Celo network's high-speed, sub-cent fee infrastructure, CRIA bridges the gap between digital assets and real-world utility.
+**CRIA (Celo Remittance Intent Agent)** is a production-grade, mobile-first financial assistant designed for the Celo Ecosystem. By leveraging Celo's high-speed, sub-cent fee infrastructure and stacking several partner bounties, CRIA makes global payments as simple as sending a text.
+
+### 🏆 Hackathon Submission
+CRIA is submitted to both the **Synthesis Hackathon** and **Celo V2: Build Agents for the Real World**. It integrates several partner tracks:
+- **Celo Main Track**: Remittances to NGN, KES, GHS using Celo stablecoins.
+- **ENS**: Human-readable agent addresses + discovery.
+- **Squid (Uniswap)**: Cross-chain "Invisible Bridging" from Solana/Base.
+- **Self Protocol**: ZK-powered identity & reputation via ERC-8004.
+- **Filecoin**: Decentralized agent memory/storage via Pinata/IPFS.
 
 ---
 
@@ -37,29 +45,34 @@ CRIA utilizes a multi-layered, resilient architecture separating the semantic AI
 graph TD
     User((User)) -->|Voice/Text| UI[React PWA]
     
-    subgraph Frontend [Client Interface]
+    subgraph Frontend ["Client Interface"]
         UI -->|Natural Language| AgentCore[Agent State Engine]
         AgentCore -->|Intent Extraction| LLM[Gemini Pro]
     end
     
-    subgraph Execution Routing [Financial Infrastructure]
+    subgraph Execution ["Financial Infrastructure"]
         AgentCore -->|Parsed Intent| Router{Action Router}
         Router -->|Celo Operations| Wagmi[Viem / Wagmi]
         Router -->|Cross-chain| BridgeService[Squid Router API]
         Router -->|Fiat Off-ramp| PayoutService[Chimoney API]
     end
     
-    subgraph On-Chain [Celo Network]
+    subgraph OnChain ["Celo Network"]
         Wagmi -->|SendTransaction| CeloRPC[Celo Mainnet RPC]
         CeloRPC -->|ERC-8004 Identity| Registry[Agent Registry Contract]
     end
 ```
 
-### Tech Stack
+### Tech Stack & Key Components:
 - **Frontend**: React, Vite, TailwindCSS, Framer Motion
 - **Web3**: Viem, Wagmi, ConnectKit, @celo/react-celo
-- **AI Processing**: Google Gemini Pro 
-- **Infrastructure**: Squid Router Integration, Chimoney Payouts API
+- **AI Processing**: Google Gemini Pro & OpenAI GPT-3.5
+- **ERC-8004 + Self Protocol**: On-chain Soulbound Agent Identity.
+- **ENS Integration**: Name resolution directly in chat.
+- **Squid Router (Uniswap)**: Background cross-chain bridging.
+- **Filecoin Storage**: Persistent agent memory on IPFS.
+- **Infrastructure**: Chimoney Payouts API for fiat settlement.
+- **x402 Economic Model**: Sustainable 0.5% service fee for the CRIA Treasury.
 
 ---
 
