@@ -17,12 +17,13 @@ export default async function handler(req: any, res: any) {
 
   try {
     if (mode === 'reply') {
-      // 1. Try Gemini first
+      // 1. Try Gemini first (Stable v1)
       try {
         if (!process.env.GEMINI_API_KEY) throw new Error("GEMINI_API_KEY is not configured.");
         
+        // Initialize with stable v1 API version to avoid v1beta 404s
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-8b" }); // 8b is more stable for quick chats
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }); 
         const prompt = `You are CRIA, a friendly AI agent for fast remittances on Celo. User: "${userInput}". Reply in 1-2 warm sentences.`;
         
         const result = await model.generateContent(prompt);
@@ -52,7 +53,7 @@ export default async function handler(req: any, res: any) {
       
       const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
       const model = genAI.getGenerativeModel({
-        model: "gemini-1.5-flash-8b",
+        model: "gemini-1.5-flash",
         generationConfig: { responseMimeType: "application/json" }
       });
 
