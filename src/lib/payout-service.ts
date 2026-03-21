@@ -10,11 +10,8 @@ export interface PayoutResult {
 }
 
 export class PayoutService {
-    private static API_BASE = 'https://api.chimoney.io/v0.2.4';
-    private static API_KEY = import.meta.env.VITE_CHIMONEY_API_KEY || 'sandbox-key';
-
     /**
-     * Initiates a bank payout in Nigeria, Kenya, or Ghana.
+     * Initiates a bank payout in Nigeria, Kenya, or Ghana via secure backend.
      */
     static async initiateBankPayout(params: {
         accountNumber: string;
@@ -42,13 +39,10 @@ export class PayoutService {
                 ]
             };
 
-            const response = await fetch(`${this.API_BASE}/payouts/bank`, {
+            const response = await fetch('/api/payout', {
                 method: 'POST',
-                headers: {
-                    'X-API-KEY': this.API_KEY,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(payload)
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: 'bank', payload })
             });
 
             const data = await response.json();
@@ -79,13 +73,10 @@ export class PayoutService {
      */
     static async getPayoutStatus(chiRef: string): Promise<{ status: string; message: string }> {
         try {
-            const response = await fetch(`${this.API_BASE}/payouts/status`, {
+            const response = await fetch('/api/payout', {
                 method: 'POST',
-                headers: {
-                    'X-API-KEY': this.API_KEY,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ chiRef })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: 'status', payload: { chiRef } })
             });
 
             const data = await response.json();

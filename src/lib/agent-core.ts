@@ -6,9 +6,8 @@ import {
     erc20Abi
 } from 'viem';
 import { STABLECOINS_BY_CHAIN, DECIMALS, testnet } from './celo';
-import { getResilientIntent, type AIProvider, type ParsedIntent } from './llm';
+import { getResilientIntent, generateConversationalReply, type AIProvider, type ParsedIntent } from './llm';
 import { generateAgentIdentity } from './erc8004';
-import { generateConversationalReply } from './llm-gemini';
 import { LocalMemory } from './local-memory';
 import { FeeService, type FeeComparison } from './fee-service';
 import { ConversationState, type OutRampSession } from './conversation-state';
@@ -261,7 +260,7 @@ export class CeloAgent {
             return { intent: intent!, provider: provider!, replyText: `Great. Lastly, please provide the exact legal name of the account holder at ${session.bankName}.` };
         }
 
-        if (!session.confirmed && !intent.confirmed) {
+        if (!session.confirmed && intent && !intent.confirmed) {
             ConversationState.updateSession({ step: 'AWAITING_CONFIRMATION' });
             return { 
                 intent: intent!, 
@@ -271,7 +270,7 @@ export class CeloAgent {
         }
 
         // Final Execution
-        if (session.confirmed || intent.confirmed) {
+        if (session.confirmed || (intent && intent.confirmed)) {
             // EXECUTE REAL PAYOUT
             try {
                 const result = await PayoutService.initiateBankPayout({
