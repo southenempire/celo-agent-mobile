@@ -12,11 +12,11 @@
 import type { WalletClient, PublicClient } from 'viem';
 import { celoSepolia } from 'viem/chains';
 
-// ERC-8004 Identity Registry
-export const ERC8004_REGISTRY_MAINNET = '0x8004A169FB4a3325136EB29fA0ceB6D2e539a432' as const;
-export const ERC8004_REGISTRY_SEPOLIA = '0x8004A818BFB912233c491871b3d84c89A494BD9e' as const;
+// ERC-8004 Identity Registry (Deterministic)
+export const ERC8004_REGISTRY_MAINNET = '0x8004A169FB4a3325136EB29fA0ceB6D2e539a432' as const; // ETH, Base, Celo
+export const ERC8004_REGISTRY_SEPOLIA = '0x8004A818BFB912233c491871b3d84c89A494BD9e' as const; // ETH Sepolia, Celo Sepolia
 
-// Default registry (Sepolia for dev, but we'll use a dynamic one in App.tsx)
+// Default registry
 export const ERC8004_REGISTRY = ERC8004_REGISTRY_SEPOLIA;
 export const CHAIN_ID = celoSepolia.id; 
 
@@ -129,11 +129,17 @@ export async function registerAgentOnChain(
 ): Promise<{ agentId: string; txHash: string }> {
   const address = walletClient.account?.address as `0x${string}`;
   const agentURI = buildAgentURI(address, deployedUrl);
+  
+  // Use Registry based on chainId (Mainnet/L2 vs Sepolia)
+  const chainId = await walletClient.getChainId();
+  const registry = (chainId === 42220 || chainId === 8453 || chainId === 1) 
+    ? ERC8004_REGISTRY_MAINNET 
+    : ERC8004_REGISTRY_SEPOLIA;
 
   // Check if already registered (has a token)
   try {
     const balance = await publicClient.readContract({
-      address: ERC8004_REGISTRY,
+      address: registry,
       abi: ERC8004_ABI,
       functionName: 'balanceOf',
       args: [address],
@@ -142,7 +148,7 @@ export async function registerAgentOnChain(
     if (balance > 0n) {
       // Already registered — get existing agentId
       const agentId = await publicClient.readContract({
-        address: ERC8004_REGISTRY,
+        address: registry,
         abi: ERC8004_ABI,
         functionName: 'tokenOfOwnerByIndex',
         args: [address, 0n],
@@ -155,7 +161,7 @@ export async function registerAgentOnChain(
 
   // Mint new agent identity
   const hash = await walletClient.writeContract({
-    address: ERC8004_REGISTRY,
+    address: registry,
     abi: ERC8004_ABI,
     functionName: 'register',
     args: [agentURI],
@@ -185,6 +191,8 @@ export async function registerAgentOnChain(
  * Format: eip155:{chainId}:{registryAddress}
  */
 export function formatAgentRegistry(chainId: number): string {
-  const registry = chainId === 42220 ? ERC8004_REGISTRY_MAINNET : ERC8004_REGISTRY_SEPOLIA;
+  const registry = (chainId === 42220 || chainId === 8453 || chainId === 1) 
+    ? ERC8004_REGISTRY_MAINNET 
+    : ERC8004_REGISTRY_SEPOLIA;
   return `eip155:${chainId}:${registry}`;
 }

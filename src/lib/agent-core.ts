@@ -14,6 +14,7 @@ import { ConversationState, type OutRampSession } from './conversation-state';
 import { PayoutService } from './payout-service';
 import { BridgeService } from './bridge-service';
 import { DecentralizedMemory } from './decentralized-memory';
+import { DelegationService } from './delegation-service';
 
 // Agent Treasury for service fees (x402-style)
 export const AGENT_TREASURY = '0x3d02def96fc41a74c7e6b939bb17af0da3d66b3c';
@@ -484,20 +485,33 @@ export class CeloAgent {
         }
 
         let recipientAddress = intent.recipient;
-        const isEnsName = recipientAddress.endsWith('.eth') || recipientAddress.endsWith('.celo');
+        const isEnsName = recipientAddress?.endsWith('.eth') || recipientAddress?.endsWith('.celo');
 
-        // Try to resolve name from memory
-        if (!recipientAddress.startsWith('0x')) {
+        // 1. Resolve ENS names (if on mainnet/supported)
+        if (recipientAddress && isEnsName) {
+            try {
+                const resolvedAddress = await this.publicClient.getEnsAddress({
+                    name: recipientAddress,
+                });
+                if (resolvedAddress) {
+                    recipientAddress = resolvedAddress;
+                }
+            } catch (e) {
+                console.warn(`[ENS] Resolution failed for ${recipientAddress}:`, e);
+            }
+        }
+
+        // 2. Try to resolve name from memory if still not a 0x address
+        if (recipientAddress && !recipientAddress.startsWith('0x')) {
             const resolved = LocalMemory.resolveName(recipientAddress);
             if (resolved) {
                 recipientAddress = resolved;
             } else if (/^\+?\d{10,15}$/.test(recipientAddress)) {
                 return this.handleOutRamp(input, { ...intent, intentType: 'out_ramp', accountNumber: recipientAddress }, provider);
             } else if (looksLikeCrossChain) {
-                // Allow the address to pass through if it's a valid cross-chain format
-                // Transaction would still fail later if not on Celo, but it won't throw "Recipient not found"
+                // Pass through
             } else {
-                throw new Error(`Recipient "${recipientAddress}" not found in AgentVault or ENS Registry.\n\nYou can map this name to an address by saying "Remember 0x... as ${recipientAddress}".`);
+                throw new Error(`Recipient "${recipientAddress}" could not be resolved as 0x address or ENS name.`);
             }
         }
 
@@ -575,6 +589,13 @@ export class CeloAgent {
         }
 
         const amountNum = parseFloat(amount);
+        
+        // --- 1. Delegation Check (MetaMask Bounty) ---
+        const limitError = DelegationService.checkLimit(amountNum, recipientAddress);
+        if (limitError) {
+            throw new Error(`🚫 **Scoped Spending Limit Blocked**\n\n${limitError}\n\nYou can adjust this limit in your Agent Passport settings.`);
+        }
+
         const treasuryFee = amountNum * 0.005; // 0.5% fee
         const SERVICE_FEE = treasuryFee.toString();
         
@@ -616,6 +637,9 @@ export class CeloAgent {
         } catch (e) {
             console.warn("Service fee collection failed, primary tx succeeded:", e);
         }
+
+        // --- 2. Record Spending for Delegation History ---
+        DelegationService.recordSpending(amountNum);
 
         const resolvedName = LocalMemory.resolveAddress(recipientAddress);
         const contactTip = !resolvedName && recipientAddress.startsWith('0x') ? `\n\nTip: You can map this address by saying "Save ${recipientAddress.slice(0, 6)}... as [Name]".` : '';

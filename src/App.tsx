@@ -13,6 +13,7 @@ import { useAgent } from './hooks/useAgent';
 import { registerAgentOnChain, ERC8004_REGISTRY_MAINNET, ERC8004_REGISTRY_SEPOLIA, ERC8004_ABI } from './lib/erc8004';
 import { type TransactionHistory, AGENT_TREASURY } from './lib/agent-core';
 import { DecentralizedMemory } from './lib/decentralized-memory';
+import { DelegationService } from './lib/delegation-service';
 
 interface Message {
     id: string;
@@ -718,6 +719,35 @@ const App: React.FC = () => {
                                                     ))}
                                                 </div>
                                             </div>
+
+                                            {/* Delegation & ENS Identity (New Hackathon Features) */}
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div className={`p-3 rounded-2xl border ${dark ? 'bg-celo-green/5 border-celo-green/10' : 'bg-celo-green/5 border-celo-green/20'}`}>
+                                                    <div className="flex items-center gap-1.5 mb-1">
+                                                        <Zap size={10} className="text-celo-green" />
+                                                        <p className={`text-[8px] font-black uppercase tracking-widest ${dark ? 'text-white/40' : 'text-gray-500'}`}>Delegation Scope</p>
+                                                    </div>
+                                                    <p className={`text-[11px] font-bold ${dark ? 'text-white/90' : 'text-gray-800'}`}>
+                                                        ${DelegationService.getRules().maxPerTransaction} Limit
+                                                    </p>
+                                                    <p className="text-[9px] font-medium text-celo-green/70">
+                                                        ${DelegationService.getDailySpent()} spent today
+                                                    </p>
+                                                </div>
+                                                <div className={`p-3 rounded-2xl border ${dark ? 'bg-blue-500/5 border-blue-500/10' : 'bg-blue-50/50 border-blue-100'}`}>
+                                                    <div className="flex items-center gap-1.5 mb-1">
+                                                        <Globe size={10} className="text-blue-400" />
+                                                        <p className={`text-[8px] font-black uppercase tracking-widest ${dark ? 'text-white/40' : 'text-gray-500'}`}>ENS Identity</p>
+                                                    </div>
+                                                    <p className={`text-[11px] font-bold ${dark ? 'text-white/90' : 'text-gray-800'}`}>
+                                                        {address?.slice(0,6)}.eth
+                                                    </p>
+                                                    <p className="text-[9px] font-medium text-blue-400/70">
+                                                        Mainnet Resolved
+                                                    </p>
+                                                </div>
+                                            </div>
+
                                             <div className={`flex items-center gap-2 text-[11px] font-semibold ${dark ? 'text-white/40' : 'text-gray-400'}`}>
                                                 <CheckCircle2 size={13} className="text-celo-green" />
                                                 Verified Identity · Fully Discoverable on-chain
