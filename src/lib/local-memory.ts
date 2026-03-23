@@ -1,17 +1,28 @@
+import { SecurityUtils } from './security';
+
 export interface Contact {
     name: string;
     address: string;
     addedAt: number;
 }
 
-const STORAGE_KEY = 'cria_contacts';
+const STORAGE_KEY = 'cria_contacts_v2_encrypted'; // New key for encrypted data
 
 export class LocalMemory {
+    private static salt = 'cria-vault-default';
+
+    static setSalt(address: string) {
+        this.salt = address;
+    }
+
     static getContacts(): Contact[] {
         try {
-            const data = localStorage.getItem(STORAGE_KEY);
-            return data ? JSON.parse(data) : [];
-        } catch {
+            const encoded = localStorage.getItem(STORAGE_KEY);
+            if (!encoded) return [];
+            const decoded = SecurityUtils.decrypt(encoded, this.salt);
+            return JSON.parse(decoded);
+        } catch (e) {
+            console.error("AgentVault: Decryption failed. Data might be corrupted or salt mismatch.", e);
             return [];
         }
     }
@@ -27,7 +38,9 @@ export class LocalMemory {
             contacts.push({ name, address, addedAt: Date.now() });
         }
         
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(contacts));
+        const data = JSON.stringify(contacts);
+        const encoded = SecurityUtils.encrypt(data, this.salt);
+        localStorage.setItem(STORAGE_KEY, encoded);
     }
 
     static resolveName(name: string): string | null {
@@ -44,6 +57,8 @@ export class LocalMemory {
 
     static deleteContact(name: string): void {
         const contacts = this.getContacts().filter(c => c.name.toLowerCase() !== name.toLowerCase());
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(contacts));
+        const data = JSON.stringify(contacts);
+        const encoded = SecurityUtils.encrypt(data, this.salt);
+        localStorage.setItem(STORAGE_KEY, encoded);
     }
 }

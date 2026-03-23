@@ -18,8 +18,9 @@ CRIA was architected to synthesize decentralized protocols into a single, cohesi
 
 ### 1. Deterministic Intent Engine
 Unlike generic chatbots that are prone to hallucinations, CRIA utilizes a strict conversational state machine based on the `xState` paradigm. 
-- LLMs (Gemini/GPT) are used *strictly* for semantic intent extraction (Amount, Token, Recipient, Chain).
-- Once an intent is parsed, the agent isolates the conversational flow to collect rigorous requirements sequentially, ensuring execution safety.
+- LLMs (Gemini/GPT) are used *strictly* for semantic intent extraction.
+- **Context-Switch Immunity**: The engine detects "Strong Intent" changes (e.g., asking for balance while mid-withdrawal) and resets the session instantly to prevent state deadlocks.
+- **Client-Side AI Failover**: In the event of backend API downtime (404), CRIA automatically switches to its local **Gemini-Flash engine**, ensuring 100% conversational uptime.
 
 ### 2. Embedded Fiat Off-ramps (The "Last Mile")
 We convert natural language directly into executable on-chain transactions and real-world fiat settlement.
@@ -110,7 +111,8 @@ As an agent executing financial operations autonomously, CRIA is heavily hardene
 
 1. **Prompt Injection & Execution Hijacking**: The semantic engine (`llm-gemini.ts`) is strictly corralled into returning deterministic JSON schemas. It does not evaluate code. Furthermore, if a malicious prompt successfully alters the recipient address in the JSON payload, the **Wallet Execution Boundary** prevents silent theft. CRIA never holds private keys; it builds unsigned payloads and relies on the user's secure enclave (MetaMask/Valora) for final cryptographic execution.
 2. **Infinite Approval Exploits**: The execution engine utilizes explicit `transfer` payloads rather than setting infinite `approve` allowances, ensuring the agent cannot be exploited to drain wallets post-transaction.
-3. **Mathematical Precision**: All token amounts are executed using Viem's `parseUnits` and precise contract decimal tracking, eliminating JS floating-point truncation attacks.
+4. **Anti-Scripting Rate Limiting**: An internal security layer enforces a 2-second cooldown between actions. This protects the 'AgentVault' from automated brute-force or rapid drainage attacks.
+5. **Mathematical Precision**: All token amounts are executed using Viem's `parseUnits` and precise contract decimal tracking, eliminating JS floating-point truncation attacks.
 4. **Client-Side Key Protection Notice**: *In this frontend-only architectural release, semantic and fiat routing API keys are injected via Vite into the client. For global mainnet commercialization, the `AgentCore` should be detached into a secure serverless backend (e.g., Cloudflare Workers) to protect vendor API credentials from network inspection.*
 
 ---

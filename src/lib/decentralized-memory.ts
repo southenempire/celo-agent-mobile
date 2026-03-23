@@ -1,11 +1,12 @@
-/**
- * Decentralized Agent Vault via IPFS / Filecoin
- * This service handles persistent, censorship-resistant storage of user contacts
- * and agent state, explicitly qualifying for decentralized memory hackathon tracks.
- */
+import { SecurityUtils } from './security';
 
 export class DecentralizedMemory {
     private static readonly STORAGE_KEY = 'cria_memory_cid';
+    private static salt = 'cria-vault-default';
+
+    static setSalt(address: string) {
+        this.salt = address;
+    }
 
     // Fallback IPFS hash generator if the user hasn't configured Pinata keys
     private static generateSimulatedCID(content: string): string {
@@ -17,14 +18,22 @@ export class DecentralizedMemory {
      * Stores contacts to decentralized storage (Filecoin/IPFS via Pinata)
      */
     static async pinContactsToFilecoin(contacts: any): Promise<string> {
-        console.log("[FilecoinStorage] Preparing to pin agent memory to IPFS network...");
+        console.log("[FilecoinStorage] Preparing to pin encrypted agent memory to IPFS network...");
         
         // 1. Serialize data
-        const dataBlob = JSON.stringify({
-            version: "1.0",
+        const rawJson = JSON.stringify({
+            version: "2.0_Encrypted",
             timestamp: Date.now(),
             context: "CRIA_AgentVault",
             records: contacts
+        });
+
+        // 2. Encrypt for Decentralized Storage
+        const encryptedBlob = SecurityUtils.encrypt(rawJson, this.salt);
+        const dataBlob = JSON.stringify({
+            payload: encryptedBlob,
+            encrypted: true,
+            hint: "CRIA Vault V2"
         });
 
         // 2. Check for Pinata JWT

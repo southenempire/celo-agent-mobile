@@ -61,7 +61,7 @@ async function main() {
 
             console.log(`🚀 Route found! Estimated bridging time: ${Math.ceil(squidRoute.estimate.estimatedRouteDuration / 60)} minutes.`);
             console.log(`💸 Estimated received amount: ${Number(squidRoute.estimate.toAmountMin) / 1e6} USDC on destination`);
-            console.log("📦 Generated Payload Target Contract:", squidRoute.transactionRequest?.targetAddress || squidRoute.transactionRequest?.target);
+            console.log("📦 Generated Payload Target Contract:", (squidRoute.transactionRequest as any)?.targetAddress || (squidRoute.transactionRequest as any)?.target);
             console.log("--------------------------------------------------\n");
         } catch (error: any) {
             console.error(`❌ Bridge Error for ${route.name}:`, error.response?.data?.errors || error.message);

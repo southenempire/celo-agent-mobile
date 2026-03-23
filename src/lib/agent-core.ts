@@ -3,18 +3,22 @@ import {
     type PublicClient,
     parseUnits,
     formatUnits,
-    erc20Abi
+    erc20Abi,
+    createPublicClient,
+    http
 } from 'viem';
+import { mainnet } from 'viem/chains';
 import { STABLECOINS_BY_CHAIN, DECIMALS, testnet } from './celo';
 import { getResilientIntent, generateConversationalReply, type AIProvider, type ParsedIntent } from './llm';
 import { generateAgentIdentity } from './erc8004';
 import { LocalMemory } from './local-memory';
 import { FeeService, type FeeComparison } from './fee-service';
-import { ConversationState, type OutRampSession } from './conversation-state';
+import { ConversationState, type BridgeSession, type OutRampSession } from './conversation-state';
 import { PayoutService } from './payout-service';
 import { BridgeService } from './bridge-service';
 import { DecentralizedMemory } from './decentralized-memory';
 import { DelegationService } from './delegation-service';
+import { SecurityUtils } from './security';
 
 // Agent Treasury for service fees (x402-style)
 export const AGENT_TREASURY = '0x3d02def96fc41a74c7e6b939bb17af0da3d66b3c';
@@ -45,7 +49,17 @@ export class CeloAgent {
     constructor(
         private walletClient: any,
         private publicClient: any
-    ) { }
+    ) { 
+        // Synchronize encryption layers with current Agent Identity
+        const address = this.walletClient.account?.address || "cria-default-agent";
+        LocalMemory.setSalt(address);
+        DecentralizedMemory.setSalt(address);
+    }
+
+    private mainnetClient = createPublicClient({
+        chain: mainnet,
+        transport: http("https://eth.llamarpc.com") // Resilient mainnet RPC for ENS
+    });
 
     private get stablecoins() {
         const chainId = this.publicClient.chain?.id ?? 44787;
@@ -106,14 +120,31 @@ export class CeloAgent {
         }
     }
 
-    async processIntent(input: string): Promise<AgentResult> {
-        // 1. Check if we are in the middle of a multi-step out-ramp
-        if (ConversationState.isOutRampActive()) {
-            return this.handleOutRamp(input);
+    async processIntent(input: string, isVoice: boolean = false): Promise<AgentResult> {
+        // --- 0. Rate-Limiting (Anti-Automation Protection) ---
+        SecurityUtils.checkRateLimit();
+
+        const cleanInput = input.trim();
+        const { intent, provider } = await getResilientIntent(cleanInput);
+
+        // --- 1. Context Switch / State Reset Logic ---
+        // If a new "Strong Intent" is detected, clear any stale multi-step sessions
+        const isStrongIntent = ['check_balance', 'save_contact', 'bridge', 'send', 'out_ramp', 'check_status', 'get_rate'].includes(intent.intentType);
+        const isConfirmation = intent.intentType === ('confirmation' as any) || 
+                             ['yes', 'no', 'confirm', 'cancel', 'proceed'].some(kw => cleanInput.toLowerCase().includes(kw));
+
+        if (isStrongIntent && !isConfirmation) {
+            console.log("[CeloAgent] Strong new intent detected. Clearing stale session state.");
+            ConversationState.clear();
         }
 
-        // 2. Parse the underlying intent
-        const { intent, provider } = await getResilientIntent(input);
+        // --- 2. Multi-Step Persistence ---
+        if (ConversationState.isOutRampActive()) {
+            return this.handleOutRamp(cleanInput, intent, provider);
+        }
+        if (ConversationState.isBridgeActive()) {
+            return this.handleBridgeConfirmation(cleanInput);
+        }
 
         // 3. Bridging Check (Phase 7)
         // If it's an out_ramp and balance is low, suggest bridging from another chain
@@ -188,7 +219,7 @@ export class CeloAgent {
     }
 
     private async handleOutRamp(input: string, intent?: ParsedIntent, provider?: AIProvider): Promise<AgentResult> {
-        let session = ConversationState.getSession();
+        let session = ConversationState.getOutRampSession();
         
         // Ensure we have a working intent/provider even if not passed
         if (!intent || !provider) {
@@ -199,7 +230,8 @@ export class CeloAgent {
 
         // If no session exists, start one. If session exists, merge new intent fields.
         if (!session && intent) {
-            session = {
+            ConversationState.setSession({
+                type: 'out_ramp',
                 amount: intent.amount || null,
                 currency: intent.currency || null,
                 accountNumber: intent.accountNumber || null,
@@ -207,8 +239,8 @@ export class CeloAgent {
                 accountName: intent.accountName || null,
                 confirmed: false,
                 step: 'AWAITING_ACCOUNT_NUMBER'
-            };
-            ConversationState.setSession(session);
+            });
+            session = ConversationState.getOutRampSession();
         } else if (session && intent) {
             // Merge existing session with new intent-parsed fields
             const updates: Partial<OutRampSession> = {};
@@ -219,70 +251,84 @@ export class CeloAgent {
             if (intent.accountName) updates.accountName = intent.accountName;
             
             ConversationState.updateSession(updates);
-            session = ConversationState.getSession()!;
+            session = ConversationState.getOutRampSession();
         }
 
         if (!session) {
             throw new Error("Oops, I lost track of our session state. Let's restart your request (e.g., 'Withdraw 5000 NGN').");
         }
 
+        // --- At this point, session is GUARANTEED to be OutRampSession ---
+        const s = session as OutRampSession;
+
         // Deep debug log for browser troubleshooting
-        console.log("[PayoutService] Session State:", session);
+        console.log("[PayoutService] Session State:", s);
 
         // LLM help to extract fields from the new input if intent wasn't clear
         if (!intent || (!intent.accountNumber && !intent.bankName && !intent.accountName)) {
-            const { intent: newIntent } = await getResilientIntent(input);
             const updates: Partial<OutRampSession> = {};
-            if (newIntent.amount) updates.amount = newIntent.amount;
-            if (newIntent.currency) updates.currency = (newIntent.currency === 'NIARA' || newIntent.currency === 'NARRA') ? 'NGN' : newIntent.currency;
-            if (newIntent.accountNumber) updates.accountNumber = newIntent.accountNumber;
-            if (newIntent.bankName) updates.bankName = newIntent.bankName;
-            if (newIntent.accountName) updates.accountName = newIntent.accountName;
-            if (newIntent.intentType === ('confirmation' as any) || input.toLowerCase().includes('yes') || input.toLowerCase().includes('confirm')) {
+            if (s.step === 'AWAITING_BANK_NAME' && input.length > 2 && input.length < 30) {
+                updates.bankName = input.replace(/bank/gi, '').trim();
+            } else if (s.step === 'AWAITING_ACCOUNT_NAME' && input.length > 3) {
+                updates.accountName = input.trim();
+            } else if (s.step === 'AWAITING_ACCOUNT_NUMBER' && /^\d{10}$/.test(input)) {
+                updates.accountNumber = input;
+            } else if (s.step === 'AWAITING_CONFIRMATION' && (input.toLowerCase().includes('yes') || input.toLowerCase().includes('confirm'))) {
                 updates.confirmed = true;
+            } else {
+                try {
+                    const { intent: newIntent } = await getResilientIntent(input);
+                    if (newIntent.amount) updates.amount = newIntent.amount;
+                    if (newIntent.currency) updates.currency = (newIntent.currency === 'NIARA' || newIntent.currency === 'NARRA') ? 'NGN' : newIntent.currency;
+                    if (newIntent.accountNumber) updates.accountNumber = newIntent.accountNumber;
+                    if (newIntent.bankName) updates.bankName = newIntent.bankName;
+                    if (newIntent.accountName) updates.accountName = newIntent.accountName;
+                    if (newIntent.intentType === ('confirmation' as any)) updates.confirmed = true;
+                } catch { /* stay in current state */ }
             }
             
             ConversationState.updateSession(updates);
-            session = ConversationState.getSession()!;
+            session = ConversationState.getOutRampSession()!;
         }
 
+        // Re-narrow after updates
+        const finalSession = session as OutRampSession;
+
         // State Machine
-        if (!session.accountNumber) {
+        if (!finalSession.accountNumber) {
             return { intent: intent!, provider: provider!, replyText: "Understood. To get started, please provide the recipient's bank account number." };
         }
         
-        if (!session.bankName) {
+        if (!finalSession.bankName) {
             ConversationState.updateSession({ step: 'AWAITING_BANK_NAME' });
-            return { intent: intent!, provider: provider!, replyText: `Account received. What is the destination bank name for account \`${session.accountNumber}\`?` };
+            return { intent: intent!, provider: provider!, replyText: `Account received. What is the destination bank name for account \`${finalSession.accountNumber}\`?` };
         }
 
-        if (!session.accountName) {
+        if (!finalSession.accountName) {
             ConversationState.updateSession({ step: 'AWAITING_ACCOUNT_NAME' });
-            return { intent: intent!, provider: provider!, replyText: `Great. Lastly, please provide the exact legal name of the account holder at ${session.bankName}.` };
+            return { intent: intent!, provider: provider!, replyText: `Great. Lastly, please provide the exact legal name of the account holder at ${finalSession.bankName}.` };
         }
 
-        if (!session.confirmed && intent && !intent.confirmed) {
+        if (!finalSession.confirmed && intent && !intent.confirmed) {
             ConversationState.updateSession({ step: 'AWAITING_CONFIRMATION' });
             return { 
                 intent: intent!, 
                 provider: provider!, 
-                replyText: `Ready to send! Here is the transfer summary:\n\n• Amount: ${session.amount} ${session.currency}\n• Recipient: ${session.accountName}\n• Bank: ${session.bankName}\n• Account: ${session.accountNumber}\n\nPlease reply with "Yes" or "Confirm" to execute.` 
+                replyText: `Ready to send! Here is the transfer summary:\n\n• Amount: ${finalSession.amount} ${finalSession.currency}\n• Recipient: ${finalSession.accountName}\n• Bank: ${finalSession.bankName}\n• Account: ${finalSession.accountNumber}\n\nPlease reply with "Yes" or "Confirm" to execute.` 
             };
         }
 
         // Final Execution
-        if (session.confirmed || (intent && intent.confirmed)) {
-            // EXECUTE REAL PAYOUT
+        if (finalSession.confirmed || (intent && intent.confirmed)) {
             try {
                 const result = await PayoutService.initiateBankPayout({
-                    accountNumber: session.accountNumber!,
-                    bankName: session.bankName!,
-                    accountName: session.accountName!,
-                    amount: parseFloat(session.amount!),
-                    currency: session.currency!
+                    accountNumber: finalSession.accountNumber!,
+                    bankName: finalSession.bankName!,
+                    accountName: finalSession.accountName!,
+                    amount: parseFloat(finalSession.amount!),
+                    currency: finalSession.currency!
                 });
 
-                // Clear session after attempt
                 ConversationState.clear();
 
                 if (result.success) {
@@ -290,7 +336,7 @@ export class CeloAgent {
                         intent: intent!,
                         provider: provider!,
                         chiRef: result.transactionId,
-                        replyText: `Transfer initiated successfully!\n\nYour ${session.amount} ${session.currency} is securely en route to ${session.accountName} at ${session.bankName}.\n\nTransaction ID: \`${result.transactionId}\`\nStatus: Settlement in progress (~5 mins).`
+                        replyText: `Transfer initiated successfully!\n\nYour ${finalSession.amount} ${finalSession.currency} is securely en route to ${finalSession.accountName} at ${finalSession.bankName}.\n\nTransaction ID: \`${result.transactionId}\`\nStatus: Settlement in progress (~5 mins).`
                     };
                 } else {
                     return {
@@ -311,6 +357,77 @@ export class CeloAgent {
         }
 
         return { intent: intent!, provider: provider!, replyText: "I'm a bit confused. Should I proceed with the transfer? (Yes/No)" };
+    }
+
+    private async handleBridgeConfirmation(input: string): Promise<AgentResult> {
+        const session = ConversationState.getBridgeSession();
+        if (!session) {
+            ConversationState.clear();
+            throw new Error("Bridge session expired.");
+        }
+
+        const lower = input.toLowerCase();
+        if (lower.includes('yes') || lower.includes('confirm') || lower.includes('proceed')) {
+            // 1. Security Check (Delegation Limits)
+            const amountNum = parseFloat(session.amount);
+            const blockReason = DelegationService.checkLimit(amountNum, session.recipient);
+            
+            if (blockReason) {
+                return {
+                    intent: { intentType: 'send' } as any,
+                    provider: 'regex',
+                    replyText: `❌ 🚫 **Security Block**\n\n${blockReason}\n\nPlease adjust your limits or try a smaller amount.`
+                };
+            }
+
+            // 2. Execute Bridge
+            try {
+                if (!session.route) {
+                    throw new Error("I don't have a valid Squid Route to execute. 🛑 This is usually because your wallet balance is too low to cover bridge gas fees, or the amount (e.g. $5) is below the provider's minimum (typically $10+ for Solana/Base).");
+                }
+
+                const result = await BridgeService.executeBridge(session.route, this.walletClient);
+                ConversationState.clear();
+                
+                if (result.success) {
+                    // Track spending for delegation
+                    DelegationService.recordSpending(amountNum);
+                    
+                    return {
+                        intent: { intentType: 'send' } as any,
+                        provider: 'regex',
+                        hash: result.hash,
+                        replyText: `✅ **Secure Bridge Confirmed & Executed!** 🚀\n\nYour ${session.amount} USDC is now moving from Celo to **${session.toChain.toUpperCase()}** via Squid Router.\n\n📱 **Confirmation Sent**: "Transfer of ${session.amount} USDC to ${session.recipient.slice(0, 8)}... on ${session.toChain} is in progress."\n\n🔗 **Track Transaction**: [View on CeloScan](https://celoscan.io/tx/${result.hash})\n\n*(Celo settles in ~5s. Cross-chain arrival depends on destination finality.)*`
+                    };
+                } else {
+                    return {
+                        intent: { intentType: 'send' } as any,
+                        provider: 'regex',
+                        replyText: `❌ **Bridge Failed**\n\n${result.message}\n\nWould you like to try again or check your balance?`
+                    };
+                }
+            } catch (err: any) {
+                console.error("[BridgeConfirmation] Execution error", err);
+                return {
+                    intent: { intentType: 'send' } as any,
+                    provider: 'regex',
+                    replyText: `❌ **Internal Error**\n\nhit a snag while broadcasting the bridge. ${err.message}`
+                };
+            }
+        } else if (lower.includes('no') || lower.includes('cancel') || lower.includes('stop')) {
+            ConversationState.clear();
+            return {
+                intent: { intentType: 'send' } as any,
+                provider: 'regex',
+                replyText: "Understood. I've cancelled the bridge request. Your funds are safe on Celo! 🛡️"
+            };
+        }
+
+        return {
+            intent: { intentType: 'send' } as any,
+            provider: 'regex',
+            replyText: "I'm waiting for your confirmation. Shall I proceed with the bridge? (Yes/No)"
+        };
     }
 
     private async handleBatchSend(intent: ParsedIntent, provider: AIProvider): Promise<AgentResult> {
@@ -393,8 +510,8 @@ export class CeloAgent {
         const name = (intent as any).contactName;
         const address = intent.recipient;
 
-        if (!name || !address || !address.startsWith('0x')) {
-            throw new Error("I need a name and a valid 0x address to save a contact. Try: 'Save 0x... as Mom'");
+        if (!name || !address) {
+            throw new Error("I need a name and a valid address to save a contact. Try: 'Save 0x... as Mom'");
         }
 
         LocalMemory.saveContact(name, address);
@@ -456,31 +573,92 @@ export class CeloAgent {
         }
 
         // --- Outbound Bridging Check (Phase 7 Refinement) ---
-        // Detect cross-chain addresses (Solana, Base, etc.) by length/format
+        // Detect cross-chain intents (from regex) or addresses
         const isCeloAddress = /^0x[a-fA-F0-9]{40}$/.test(intent.recipient || '');
-        const looksLikeCrossChain = /^[a-zA-Z0-9]{30,50}$/.test(intent.recipient || '');
+        const looksLikeCrossChain = /^[a-zA-Z0-9]{30,60}$/.test(intent.recipient || '');
+        const hasTargetChain = !!intent.targetChain;
 
-        if (intent.recipient && looksLikeCrossChain && !isCeloAddress) {
+        if (hasTargetChain || (intent.recipient && looksLikeCrossChain && !isCeloAddress)) {
             try {
+                const targetChain = intent.targetChain?.toLowerCase() || (looksLikeCrossChain ? 'solana' : 'base');
+                
+                // Map common names to Squid IDs
+                const chainMap: Record<string, string> = {
+                    'base': '8453', 'solana': 'solana', 'ethereum': '1', 'eth': '1',
+                    'arbitrum': '42161', 'polygon': '137', 'optimism': '10', 'op': '10'
+                };
+                
+                const toChainId = chainMap[targetChain] || targetChain;
+                const amountNum = parseFloat(intent.amount || "0");
+
+                // 1. Minimum Amount Check (Solana specific for Squid)
+                if (toChainId === 'solana' && amountNum < 10) {
+                    return {
+                        intent,
+                        provider,
+                        replyText: `⚠️ **Solana Bridging Tip**\n\nCross-chain transfers to Solana via Squid Router typically require a minimum of **$10 USDC** to cover gas and liquidity. \n\nPlease try an amount of $10 or more for a successful bridge.`
+                    };
+                }
+
+                // 2. Mandatory Security Check (Delegation Limits)
+                const blockReason = DelegationService.checkLimit(amountNum, intent.recipient || "");
+                if (blockReason) {
+                    return {
+                        intent,
+                        provider,
+                        replyText: `❌ 🚫 **Security Block**\n\n${blockReason}\n\nPlease adjust your Celo Agent limits or try a smaller amount.`
+                    };
+                }
+                
+                // Identify correct tokens
+                let fromToken = "USDC"; 
+                let toToken = toChainId === 'solana' ? "SOL-USDC" : "USDC";
+
+                // 3. Start Session & Fetch Quote
                 const quote = await BridgeService.getBridgeQuote({
-                    fromChain: "42220", // Celo
-                    toChain: "solana",
-                    fromToken: "CELO-USDC", 
-                    toToken: "SOL-USDC",
-                    fromAmount: (parseFloat(intent.amount || "0") * 10**6).toString(),
-                    fromAddress: this.walletClient.account?.address, 
-                    toAddress: intent.recipient
+                    fromChain: "42220", 
+                    toChain: toChainId,
+                    fromToken, 
+                    toToken,
+                    fromAmount: parseUnits(intent.amount || "0", 6).toString(),
+                    fromAddress: this.walletClient.account?.address!, 
+                    toAddress: intent.recipient || this.walletClient.account?.address!
+                });
+
+                ConversationState.setSession({
+                    type: 'bridge',
+                    fromChain: "42220",
+                    toChain: toChainId,
+                    fromToken,
+                    toToken,
+                    amount: intent.amount!,
+                    recipient: intent.recipient || this.walletClient.account?.address!,
+                    route: quote.success ? quote.route : null,
+                    quoteMessage: quote.message || "",
+                    confirmed: false,
+                    step: 'AWAITING_CONFIRMATION'
                 });
 
                 if (quote.success) {
                     return {
                         intent,
                         provider,
-                        replyText: `🦑 **Cross-chain Transfer Detected!** \n\nI'll use **Squid Router** to bridge your funds from **Celo** to **Solana** 'under-the-hood'.\n\n${quote.message}\n\nShall I proceed with this cross-chain send?`
+                        replyText: `🦑 **Cross-chain Transfer Alert!** \n\nI've found a secure route to move ${intent.amount} USDC to **${targetChain.toUpperCase()}**.\n\n${quote.message}\n\n**Security Verification**: Shall I proceed with this secure cross-chain send? (Yes/No)`
+                    };
+                } else {
+                    return {
+                        intent,
+                        provider,
+                        replyText: `⚠️ **Bridge Route Warning**\n\nI couldn't fetch a live quote right now (Squid says: "${quote.message}"), but I can still attempt to broadcast the intent if you wish.\n\nShall I proceed with the bridge anyway? (Yes/No)`
                     };
                 }
-            } catch (e) {
-                console.error("[BridgeService] Outbound quote failed", e);
+            } catch (e: any) {
+                console.error("[BridgeService] Outbound flow failed", e);
+                return {
+                    intent,
+                    provider,
+                    replyText: `❌ **Bridge Snap**\n\nI hit an issue while prepping your cross-chain move. ${e.message || "Please check your network and try again."}`
+                };
             }
         }
 
@@ -490,7 +668,7 @@ export class CeloAgent {
         // 1. Resolve ENS names (if on mainnet/supported)
         if (recipientAddress && isEnsName) {
             try {
-                const resolvedAddress = await this.publicClient.getEnsAddress({
+                const resolvedAddress = await this.mainnetClient.getEnsAddress({
                     name: recipientAddress,
                 });
                 if (resolvedAddress) {

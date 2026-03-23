@@ -22,6 +22,7 @@
         "openai": "^6.27.0",
         "react": "^18.2.0",
         "react-dom": "^18.2.0",
+        "tweetnacl": "^1.0.3",
         "viem": "^2.47.1",
         "vite-plugin-pwa": "^1.2.0",
         "wagmi": "^2.19.5"
