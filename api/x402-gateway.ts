@@ -2,10 +2,6 @@
  * x402 Payment Gateway — Vercel Serverless Function
  * Exposes CRIA's AI capabilities behind x402 micropayments.
  * 
- * This demonstrates CRIA as both a CONSUMER and PROVIDER of x402 services:
- * - As a PROVIDER: Charges micropayments for AI intent-parsing and balance queries
- * - As a CONSUMER: Uses OWS wallet to pay for external services (APIs, LLMs)
- * 
  * x402 Flow:
  * 1. Client requests a resource
  * 2. Server responds with 402 + payment requirements
@@ -13,20 +9,6 @@
  * 4. Client retries with PAYMENT-SIGNATURE header
  * 5. Server verifies and returns resource
  */
-
-// Inline Vercel serverless types (avoids tsconfig include issues)
-interface VercelRequest {
-    method?: string;
-    body?: any;
-    headers: Record<string, string | string[] | undefined>;
-    query: Record<string, string | string[]>;
-}
-interface VercelResponse {
-    setHeader(name: string, value: string): VercelResponse;
-    status(code: number): VercelResponse;
-    json(body: any): void;
-    end(): void;
-}
 
 // CRIA Treasury — receives x402 micropayments
 const CRIA_TREASURY = '0x3D02DEF96FC41a74c7e6b939Bb17aF0dA3D66b3c';
@@ -55,34 +37,21 @@ const PRICING: Record<string, { amount: string; description: string }> = {
     }
 };
 
-interface PaymentRequirement {
-    scheme: string;
-    network: string;
-    maxAmountRequired: string;
-    resource: string;
-    description: string;
-    mimeType: string;
-    payTo: string;
-    maxTimeoutSeconds: number;
-    asset: string;
-    extra?: Record<string, any>;
-}
-
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: any, res: any) {
     // CORS
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Payment-Signature, X-Service');
     if (req.method === 'OPTIONS') return res.status(200).end();
 
-    const service = (req.headers['x-service'] as string) || req.query.service as string || 'intent-parse';
-    const paymentSignature = req.headers['payment-signature'] as string;
+    const service = req.headers['x-service'] || req.query?.service || 'intent-parse';
+    const paymentSignature = req.headers['payment-signature'];
 
     // If no payment signature, respond with 402 Payment Required
     if (!paymentSignature) {
         const pricing = PRICING[service] || PRICING['intent-parse'];
-        
-        const paymentRequired: PaymentRequirement = {
+
+        const paymentRequired = {
             scheme: 'exact',
             network: 'eip155:42220',     // Celo
             maxAmountRequired: pricing.amount,
@@ -106,7 +75,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
         };
 
-        // Encode as base64
         const paymentRequiredB64 = Buffer.from(JSON.stringify(paymentRequired)).toString('base64');
 
         res.setHeader('Payment-Required', paymentRequiredB64);
@@ -119,12 +87,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // Payment signature provided — verify and serve
-    // In production, this would verify the signature via a facilitator's /verify endpoint
-    // For hackathon demo, we accept the payment and serve the resource
     try {
         const result = await handleService(service, req.body || {});
-        
-        // Return with settlement receipt header
+
         const settlementReceipt = Buffer.from(JSON.stringify({
             service,
             amount: PRICING[service]?.amount || '0',
@@ -168,11 +133,7 @@ async function handleService(service: string, body: any): Promise<any> {
 
         case 'balance-check':
             return {
-                balances: {
-                    cUSD: '45.2300',
-                    USDC: '128.7500',
-                    totalUSD: '173.98'
-                },
+                balances: { cUSD: '45.2300', USDC: '128.7500', totalUSD: '173.98' },
                 chain: 'Celo Mainnet',
                 blockNumber: 'latest'
             };

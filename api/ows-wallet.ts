@@ -10,38 +10,6 @@
  *   - keys:     Manage API keys for agent access
  */
 
-// Inline Vercel serverless types (avoids tsconfig include issues)
-interface VercelRequest {
-    method?: string;
-    body?: any;
-    headers: Record<string, string | string[] | undefined>;
-    query: Record<string, string | string[]>;
-}
-interface VercelResponse {
-    setHeader(name: string, value: string): VercelResponse;
-    status(code: number): VercelResponse;
-    json(body: any): void;
-    end(): void;
-}
-
-// OWS SDK — loaded lazily on first request.
-// The SDK is a native Rust FFI binary only available in Vercel serverless.
-// When unavailable, the handler falls back to demo responses.
-let ows: typeof import('@open-wallet-standard/core') | null = null;
-let owsInitialized = false;
-
-async function getOWS() {
-    if (!owsInitialized) {
-        owsInitialized = true;
-        try {
-            ows = await import('@open-wallet-standard/core');
-        } catch {
-            console.warn('[OWS] SDK not available — running in demo mode');
-        }
-    }
-    return ows;
-}
-
 const AGENT_WALLET_NAME = 'cria-agent-treasury';
 const VAULT_PATH = '/tmp/.ows'; // Ephemeral vault for serverless
 
@@ -70,7 +38,23 @@ const CRIA_POLICY = {
     action: 'deny'
 };
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+// OWS SDK — loaded lazily. Falls back to demo mode when unavailable.
+let owsSdk: any = null;
+let owsLoaded = false;
+
+async function loadOWS(): Promise<any> {
+    if (!owsLoaded) {
+        owsLoaded = true;
+        try {
+            owsSdk = await import('@open-wallet-standard/core' as string);
+        } catch {
+            console.warn('[OWS] SDK not available — running in demo mode');
+        }
+    }
+    return owsSdk;
+}
+
+export default async function handler(req: any, res: any) {
     // CORS
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -81,24 +65,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { action, ...params } = req.body || {};
 
     // Lazy-load OWS SDK
-    const owsSdk = await getOWS();
+    const ows = await loadOWS();
 
     // If OWS SDK is not available, return demo responses
-    if (!owsSdk) {
+    if (!ows) {
         return res.status(200).json(getDemoResponse(action, params));
     }
 
     try {
         switch (action) {
             case 'create': {
-                // Create agent wallet with OWS
-                const wallet = owsSdk.createWallet(AGENT_WALLET_NAME, undefined, 12, VAULT_PATH);
-                
-                // Create default spending policy
-                owsSdk.createPolicy(JSON.stringify(CRIA_POLICY), VAULT_PATH);
-                
-                // Create API key scoped to wallet + policy
-                const apiKey = owsSdk.createApiKey(
+                const wallet = ows.createWallet(AGENT_WALLET_NAME, undefined, 12, VAULT_PATH);
+                ows.createPolicy(JSON.stringify(CRIA_POLICY), VAULT_PATH);
+                const apiKey = ows.createApiKey(
                     'cria-agent-key',
                     [AGENT_WALLET_NAME],
                     [CRIA_POLICY.id],
@@ -106,32 +85,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                     undefined,
                     VAULT_PATH
                 );
-
                 return res.status(200).json({
                     success: true,
-                    wallet: {
-                        name: wallet.name,
-                        id: wallet.id,
-                        accounts: wallet.accounts,
-                        createdAt: wallet.createdAt
-                    },
+                    wallet: { name: wallet.name, id: wallet.id, accounts: wallet.accounts, createdAt: wallet.createdAt },
                     policy: CRIA_POLICY,
                     apiKey: { id: apiKey.id, name: apiKey.name }
-                    // Note: token is NOT returned for security
                 });
             }
 
             case 'info': {
-                const wallet = owsSdk.getWallet(AGENT_WALLET_NAME, VAULT_PATH);
-                const policies = owsSdk.listPolicies(VAULT_PATH);
+                const wallet = ows.getWallet(AGENT_WALLET_NAME, VAULT_PATH);
+                const policies = ows.listPolicies(VAULT_PATH);
                 return res.status(200).json({
                     success: true,
-                    wallet: {
-                        name: wallet.name,
-                        id: wallet.id,
-                        accounts: wallet.accounts,
-                        createdAt: wallet.createdAt
-                    },
+                    wallet: { name: wallet.name, id: wallet.id, accounts: wallet.accounts, createdAt: wallet.createdAt },
                     policies
                 });
             }
@@ -141,10 +108,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 if (!chain || !txHex) {
                     return res.status(400).json({ error: 'chain and txHex required' });
                 }
-                const result = owsSdk.signTransaction(
-                    AGENT_WALLET_NAME, chain, txHex,
-                    undefined, 0, VAULT_PATH
-                );
+                const result = ows.signTransaction(AGENT_WALLET_NAME, chain, txHex, undefined, 0, VAULT_PATH);
                 return res.status(200).json({
                     success: true,
                     signature: result.signature,
@@ -153,7 +117,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
 
             case 'policies': {
-                const policies = owsSdk.listPolicies(VAULT_PATH);
+                const policies = ows.listPolicies(VAULT_PATH);
                 return res.status(200).json({ success: true, policies });
             }
 
@@ -170,7 +134,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 }
 
 /**
- * Demo responses when OWS SDK is not available (e.g., browser preview)
+ * Demo responses when OWS SDK is not available
  */
 function getDemoResponse(action: string, _params: any) {
     const demoWallet = {
