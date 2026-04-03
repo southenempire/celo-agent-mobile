@@ -1,46 +1,70 @@
-# CRIA: Celo Remittance Intent Agent 🌳
+# CRIA Pro — OWS-Powered Remittance Agent 🛡️
 
-**CRIA (Celo Remittance Intent Agent)** is a production-grade, mobile-first financial assistant designed for the Celo Ecosystem. By leveraging Celo's high-speed, sub-cent fee infrastructure and stacking several partner bounties, CRIA makes global payments as simple as sending a text.
+**CRIA (Celo Remittance Intent Agent)** is a production-grade, mobile-first financial agent powered by the **Open Wallet Standard (OWS)** for policy-gated signing, **x402** for micropayment revenue, and **ERC-8004** for on-chain agent identity.
 
-### 🏆 Hackathon Submission
-CRIA is submitted to both the **Synthesis Hackathon** and **Celo V2: Build Agents for the Real World**. It integrates several partner tracks:
-- **Celo Main Track**: Remittances to NGN, KES, GHS using Celo stablecoins.
-- **ENS**: Human-readable agent addresses + discovery.
-- **Squid (Uniswap)**: Cross-chain "Invisible Bridging" from Solana/Base.
-- **Self Protocol**: ZK-powered identity & reputation via ERC-8004.
-- **Filecoin**: Decentralized agent memory/storage via Pinata/IPFS.
+### 🏆 OWS Hackathon Submission
+**Track: Agent Spend Governance & Identity**
 
----
-
-## 🏗️ Architecture & Core Philosophy
-
-CRIA was architected to synthesize decentralized protocols into a single, cohesive consumer application. We observed that cross-chain DeFi UX is highly fragmented and traditional remittances are prohibitively expensive. CRIA solves this by acting as an intelligent routing layer.
-
-### 1. Deterministic Intent Engine
-Unlike generic chatbots that are prone to hallucinations, CRIA utilizes a strict conversational state machine based on the `xState` paradigm. 
-- LLMs (Gemini/GPT) are used *strictly* for semantic intent extraction.
-- **Context-Switch Immunity**: The engine detects "Strong Intent" changes (e.g., asking for balance while mid-withdrawal) and resets the session instantly to prevent state deadlocks.
-- **Client-Side AI Failover**: In the event of backend API downtime (404), CRIA automatically switches to its local **Gemini-Flash engine**, ensuring 100% conversational uptime.
-
-### 2. Embedded Fiat Off-ramps (The "Last Mile")
-We convert natural language directly into executable on-chain transactions and real-world fiat settlement.
-- **Stablecoin Native**: Operates natively on Celo stablecoins (cUSD, USDC).
-- **Direct-to-Bank**: Integrates the Chimoney API for NGN and KES payouts, settling crypto to local fiat instantly.
-
-### 3. Unified Cross-Chain Swaps
-DeFi should not be restricted by chain boundaries. CRIA features a powerful 'under-the-hood' cross-chain routing engine.
-- **Intelligent Inbound Bridging**: If a user attempts a transfer but lacks Celo liquidity, CRIA detects balances on other EVM/SVM chains (e.g., Solana, Base) and seamlessly bridges capital to Celo using Squid Router or Axelar.
-- **Outbound Routing**: CRIA automatically detects non-Celo recipient addresses (Solana Base58, Base EVM) and routes assets outbound across chains efficiently.
-
-### 4. Agent Identity & Infrastructure
-- **On-chain Registry (ERC-8004)**: Every CRIA user instance operates with a verified Agent ID. This sybil-resistant identity ensures transparent tracking.
-- **AgentVault Decentralized Memory**: Contacts are natively resolved via the **ENS Registry**, giving the agent semantic understanding of addresses. To maintain censorship resistance, user contact states are securely pinned to decentralized peer-to-peer storage (**Filecoin / IPFS**).
+CRIA demonstrates the full OWS stack in a real-world application:
+- **OWS Wallet Management**: Policy-gated agent wallet via `createWallet()`, `signTransaction()`
+- **OWS Policy Engine**: Declarative spending rules — chain allowlists, spend limits, expiry
+- **x402 Micropayments**: CRIA sells AI intent-parsing as pay-per-query services
+- **ERC-8004 Identity**: On-chain soulbound agent identity (Agent #2335)
+- **Cross-Chain**: Celo, Base, Ethereum, Solana via Squid Router
 
 ---
 
-## ⚙️ Technical Blueprint
+## 🛡️ OWS Integration
 
-CRIA utilizes a multi-layered, resilient architecture separating the semantic AI from the absolute Web3 execution environment.
+### How OWS Powers CRIA
+
+```
+User (Voice/Text) → Intent Parser → OWS Policy Gate → OWS Sign → Settle on Celo
+```
+
+1. **Policy-Gated Signing**: Every transaction passes through the OWS policy engine before signing. The policy defines allowed chains, spend limits, and expiry.
+
+2. **Agent Wallet**: CRIA's treasury uses an OWS-managed HD wallet (`cria-agent-treasury`) with derived accounts for each supported chain.
+
+3. **API Key Scoping**: External services access CRIA through OWS API keys scoped to specific wallets and policies.
+
+### OWS Policy Example
+```json
+{
+  "id": "cria-remittance-limits",
+  "rules": [
+    { "type": "allowed_chains", "chain_ids": ["eip155:42220", "eip155:8453", "eip155:1"] },
+    { "type": "expires_at", "timestamp": "2027-01-01T00:00:00Z" }
+  ],
+  "action": "deny"
+}
+```
+
+---
+
+## 💰 x402 Payment Protocol
+
+CRIA is both a **consumer** and **provider** of x402 micropayment services:
+
+| Service | Price | Description |
+|---------|-------|-------------|
+| Intent Parse | $0.01 | AI-powered financial intent extraction |
+| Balance Check | $0.005 | On-chain balance query across stablecoins |
+| Bridge Quote | $0.015 | Cross-chain route discovery via Squid |
+| Rate Lookup | $0.002 | Live forex exchange rates |
+
+```bash
+# Request without payment → 402 Payment Required
+curl https://celo-agent-mobile.vercel.app/api/x402-gateway
+
+# Request with OWS-signed payment → 200 OK
+curl -H "Payment-Signature: 0x..." -H "X-Service: intent-parse" \
+  https://celo-agent-mobile.vercel.app/api/x402-gateway
+```
+
+---
+
+## 🏗️ Architecture
 
 ```mermaid
 graph TD
@@ -48,79 +72,76 @@ graph TD
     
     subgraph Frontend ["Client Interface"]
         UI -->|Natural Language| AgentCore[Agent State Engine]
-        AgentCore -->|Intent Extraction| LLM[Gemini Pro]
+        AgentCore -->|Intent Extraction| LLM[Gemini 2.0 Flash]
+    end
+    
+    subgraph OWS ["OWS Layer"]
+        AgentCore -->|Policy Check| PolicyEngine[OWS Policy Engine]
+        PolicyEngine -->|Approved| Signer[OWS Wallet Signer]
+        PolicyEngine -->|Denied| Reject[Policy Denied Response]
     end
     
     subgraph Execution ["Financial Infrastructure"]
-        AgentCore -->|Parsed Intent| Router{Action Router}
-        Router -->|Celo Operations| Wagmi[Viem / Wagmi]
-        Router -->|Cross-chain| BridgeService[Squid Router API]
+        Signer -->|Signed TX| Router{Action Router}
+        Router -->|Celo Ops| Wagmi[Viem / Wagmi]
+        Router -->|Cross-chain| BridgeService[Squid Router]
         Router -->|Fiat Off-ramp| PayoutService[Chimoney API]
     end
     
-    subgraph OnChain ["Celo Network"]
-        Wagmi -->|SendTransaction| CeloRPC[Celo Mainnet RPC]
-        CeloRPC -->|ERC-8004 Identity| Registry[Agent Registry Contract]
+    subgraph Revenue ["x402 Revenue"]
+        AgentCore -->|Micropayments| x402[x402 Gateway]
+        x402 -->|Fees| Treasury[CRIA Treasury]
     end
 ```
 
-### Tech Stack & Key Components:
+### Tech Stack
+- **Wallet**: OWS (Open Wallet Standard) — `@open-wallet-standard/core`
+- **Payments**: x402 Protocol — `@x402/core`, `@x402/fetch`  
+- **Identity**: ERC-8004 Soulbound Agent Registry
 - **Frontend**: React, Vite, TailwindCSS, Framer Motion
-- **Web3**: Viem, Wagmi, ConnectKit, @celo/react-celo
-- **AI Processing**: Google Gemini Pro & OpenAI GPT-3.5
-- **ERC-8004 + Self Protocol**: On-chain Soulbound Agent Identity.
-- **ENS Integration**: Name resolution directly in chat.
-- **Squid Router (Uniswap)**: Background cross-chain bridging.
-- **Filecoin Storage**: Persistent agent memory on IPFS.
-- **Infrastructure**: Chimoney Payouts API for fiat settlement.
-- **x402 Economic Model**: Sustainable 0.5% service fee for the CRIA Treasury.
+- **Web3**: Viem, Wagmi, Reown AppKit
+- **AI**: Google Gemini 2.0 Flash, OpenAI GPT-3.5 (failover)
+- **Cross-Chain**: Squid Router (Solana, Base, Ethereum → Celo)
+- **Fiat**: Chimoney API (NGN, KES, GHS bank payouts)
+- **Storage**: Filecoin/IPFS via Pinata
 
 ---
 
 ## 🚀 Local Development
 
-1. **Clone the repository**
 ```bash
-git clone https://github.com/cria-finance/mobile
-cd mobile
-```
-
-2. **Install dependencies**
-```bash
+git clone https://github.com/southenempire/celo-agent-mobile
+cd celo-agent-mobile
 npm install
-```
-
-3. **Setup environment variables**
-```bash
-cp .env.example .env
-# VITE_GEMINI_API_KEY (Semantic Engine)
-# VITE_CHIMONEY_API_KEY (Fiat Off-ramp)
-# VITE_SQUID_INTEGRATOR_ID (Cross-chain Bridging)
-```
-
-4. **Run the local development server**
-```bash
 npm run dev
 ```
 
----
-
-## 🛡️ Security & Threat Model (High-Level Audit)
-
-As an agent executing financial operations autonomously, CRIA is heavily hardened against standard Web3 and LLM attack vectors:
-
-1. **Prompt Injection & Execution Hijacking**: The semantic engine (`llm-gemini.ts`) is strictly corralled into returning deterministic JSON schemas. It does not evaluate code. Furthermore, if a malicious prompt successfully alters the recipient address in the JSON payload, the **Wallet Execution Boundary** prevents silent theft. CRIA never holds private keys; it builds unsigned payloads and relies on the user's secure enclave (MetaMask/Valora) for final cryptographic execution.
-2. **Infinite Approval Exploits**: The execution engine utilizes explicit `transfer` payloads rather than setting infinite `approve` allowances, ensuring the agent cannot be exploited to drain wallets post-transaction.
-4. **Anti-Scripting Rate Limiting**: An internal security layer enforces a 2-second cooldown between actions. This protects the 'AgentVault' from automated brute-force or rapid drainage attacks.
-5. **Mathematical Precision**: All token amounts are executed using Viem's `parseUnits` and precise contract decimal tracking, eliminating JS floating-point truncation attacks.
-4. **Client-Side Key Protection Notice**: *In this frontend-only architectural release, semantic and fiat routing API keys are injected via Vite into the client. For global mainnet commercialization, the `AgentCore` should be detached into a secure serverless backend (e.g., Cloudflare Workers) to protect vendor API credentials from network inspection.*
+### Environment Variables
+```env
+VITE_GEMINI_API_KEY=     # Gemini 2.0 Flash
+VITE_CHIMONEY_API_KEY=   # Fiat off-ramp
+VITE_SQUID_INTEGRATOR_ID= # Cross-chain bridging
+```
 
 ---
 
-## 🌍 The Endgame
+## 🛡️ Security
 
-Traditional remittances cost 7-10% and take days to clear. By reducing fees to <1% and settlement times to seconds, while maintaining an approachable, Voice-first interface, we are building the financial infrastructure the world actually needs.  
-
+1. **OWS Policy-Gated Signing**: Every transaction validated against OWS policy rules (chain, amount, expiry) before signing.
+2. **No Direct Key Access**: Agent never touches private keys — all signing goes through OWS vault.
+3. **Anti-Scripting**: 2-second cooldown between actions protects against automated attacks.
+4. **Prompt Injection Protection**: LLMs produce deterministic JSON schemas only, never execute code.
+5. **Mathematical Precision**: All amounts use `parseUnits` — zero floating-point truncation.
 
 ---
-Build Trigger: Production Hardening Complete 🛡️
+
+## 🌍 Links
+
+- **Live App**: [celo-agent-mobile.vercel.app](https://celo-agent-mobile.vercel.app)
+- **Pitch Deck**: [cria-pro-pitch.html](./cria-pro-pitch.html)
+- **Agent Registry**: [ERC-8004 #2335 on Celo Mainnet](https://celoscan.io)
+- **Demo Video**: [YouTube](https://youtube.com/shorts/tq6bfyvXmZs)
+
+---
+
+Built with 🛡️ OWS · ⚡ x402 · 🌳 Celo · By [southen_](https://github.com/southenempire)

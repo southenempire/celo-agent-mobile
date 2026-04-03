@@ -14,6 +14,7 @@ import { registerAgentOnChain, ERC8004_REGISTRY_MAINNET, ERC8004_REGISTRY_SEPOLI
 import { type TransactionHistory, AGENT_TREASURY } from './lib/agent-core';
 import { DecentralizedMemory } from './lib/decentralized-memory';
 import { DelegationService } from './lib/delegation-service';
+import { OWSService } from './lib/ows-service';
 
 interface Message {
     id: string;
@@ -653,7 +654,7 @@ const App: React.FC = () => {
                             </div>
 
                             <p className={`text-center text-[9px] font-bold uppercase tracking-widest mt-2 ${dark ? 'text-white/20' : 'text-gray-300'}`}>
-                                Encrypted · Celo L2 · ENS · ERC-8004 · Self Protocol
+                                OWS · x402 · Celo L2 · ENS · ERC-8004
                             </p>
                         </footer>
                     </motion.div>
@@ -697,8 +698,9 @@ const App: React.FC = () => {
                                     <div className="space-y-0">
                                         {[
                                             { label: 'Agent Wallet', value: `${AGENT_TREASURY.slice(0, 10)}...${AGENT_TREASURY.slice(-6)}` },
+                                            { label: 'OWS Wallet', value: 'cria-agent-treasury', valueClass: 'text-purple-400 font-mono text-[10px]' },
                                             { label: 'Agent ID', value: agentId ? `#${agentId}` : 'Registered', valueClass: 'text-celo-green font-black text-lg' },
-                                            { label: 'Status', value: 'ACTIVE', valueClass: 'text-celo-green font-black tracking-wider' },
+                                            { label: 'Status', value: 'OWS ACTIVE', valueClass: 'text-celo-green font-black tracking-wider' },
                                             { label: 'AgentVault', value: DecentralizedMemory.getActiveCID() ? `ipfs://${DecentralizedMemory.getActiveCID()?.slice(0,10)}...` : 'IPFS Node Initialized', valueClass: 'text-blue-400 font-mono text-[10px]' },
                                         ].map((row, i) => (
                                             <div key={i} className={`flex justify-between items-center py-3 ${i < 2 ? `border-b ${dark ? 'border-white/6' : 'border-gray-100'}` : ''}`}>
@@ -711,7 +713,7 @@ const App: React.FC = () => {
                                             <div className={`p-4 rounded-2xl border ${dark ? 'bg-white/5 border-white/5' : 'bg-gray-50 border-gray-100'}`}>
                                                 <p className={`text-[10px] font-black uppercase tracking-widest mb-2 ${dark ? 'text-celo-green' : 'text-celo-green/80'}`}>Capabilities</p>
                                                 <div className="grid grid-cols-2 gap-2">
-                                                    {['Remittance', 'Bridging', 'ENS Mapping', 'DeFi Actions'].map(c => (
+                                                    {['OWS Wallet', 'x402 Pay', 'Remittance', 'Bridging', 'ENS Mapping', 'Policy Engine'].map(c => (
                                                         <div key={c} className="flex items-center gap-2">
                                                             <div className="w-1.5 h-1.5 rounded-full bg-celo-green" />
                                                             <span className={`text-[10px] font-medium ${dark ? 'text-white/60' : 'text-gray-600'}`}>{c}</span>
@@ -720,18 +722,18 @@ const App: React.FC = () => {
                                                 </div>
                                             </div>
 
-                                            {/* Delegation & ENS Identity (New Hackathon Features) */}
+                                            {/* OWS Policy & ENS Identity */}
                                             <div className="grid grid-cols-2 gap-3">
-                                                <div className={`p-3 rounded-2xl border ${dark ? 'bg-celo-green/5 border-celo-green/10' : 'bg-celo-green/5 border-celo-green/20'}`}>
+                                                <div className={`p-3 rounded-2xl border ${dark ? 'bg-purple-500/5 border-purple-500/10' : 'bg-purple-50/50 border-purple-100'}`}>
                                                     <div className="flex items-center gap-1.5 mb-1">
-                                                        <Zap size={10} className="text-celo-green" />
-                                                        <p className={`text-[8px] font-black uppercase tracking-widest ${dark ? 'text-white/40' : 'text-gray-500'}`}>Delegation Scope</p>
+                                                        <Zap size={10} className="text-purple-400" />
+                                                        <p className={`text-[8px] font-black uppercase tracking-widest ${dark ? 'text-white/40' : 'text-gray-500'}`}>OWS Policy</p>
                                                     </div>
                                                     <p className={`text-[11px] font-bold ${dark ? 'text-white/90' : 'text-gray-800'}`}>
-                                                        ${DelegationService.getRules().maxPerTransaction} Limit
+                                                        5 Chains Allowed
                                                     </p>
-                                                    <p className="text-[9px] font-medium text-celo-green/70">
-                                                        ${DelegationService.getDailySpent()} spent today
+                                                    <p className="text-[9px] font-medium text-purple-400/70">
+                                                        Policy-Gated Signing
                                                     </p>
                                                 </div>
                                                 <div className={`p-3 rounded-2xl border ${dark ? 'bg-blue-500/5 border-blue-500/10' : 'bg-blue-50/50 border-blue-100'}`}>

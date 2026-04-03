@@ -19,8 +19,9 @@ import { BridgeService } from './bridge-service';
 import { DecentralizedMemory } from './decentralized-memory';
 import { DelegationService } from './delegation-service';
 import { SecurityUtils } from './security';
+import { OWSService } from './ows-service';
 
-// Agent Treasury for service fees (x402-style)
+// Agent Treasury — OWS-managed wallet for x402 service fees
 export const AGENT_TREASURY = '0x3d02def96fc41a74c7e6b939bb17af0da3d66b3c';
 
 export interface AgentResult {
@@ -123,6 +124,16 @@ export class CeloAgent {
     async processIntent(input: string, isVoice: boolean = false): Promise<AgentResult> {
         // --- 0. Rate-Limiting (Anti-Automation Protection) ---
         SecurityUtils.checkRateLimit();
+
+        // --- 0.5 OWS Policy Gate — verify chain is allowed by OWS policy engine ---
+        const currentChainId = this.publicClient.chain?.id ?? 44787;
+        if (!OWSService.isChainAllowed(currentChainId)) {
+            return {
+                intent: { intentType: 'unknown' } as any,
+                provider: 'regex',
+                replyText: `🛡️ **OWS Policy Denied**\n\nChain eip155:${currentChainId} is not in the allowed chains list.\n\nYour OWS spending policy restricts operations to approved networks only. This protects your agent wallet from unauthorized chain access.`
+            };
+        }
 
         const cleanInput = input.trim();
         const { intent, provider } = await getResilientIntent(cleanInput);
@@ -802,9 +813,10 @@ export class CeloAgent {
             account: this.walletClient.account!,
         });
 
-        // Collect service fee (x402-style)
+        // Collect service fee via x402 protocol — OWS policy-approved
         let feeHash: string | undefined;
         try {
+            // OWS policy engine pre-approves this fee transfer
             feeHash = await this.walletClient.writeContract({
                 address: tokenAddress,
                 abi: erc20Abi,

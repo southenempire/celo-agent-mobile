@@ -1,23 +1,555 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-  <meta charset="UTF-8" />
-  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="CRIA Pro" />
-  <title>CRIA Pro | Celo Remittance Agent</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <script type="module" crossorigin src="/assets/index-CYfA2hXE.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-DfA4-0Kt.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRIA Pro | Pitch Deck</title>
+
+    <!-- Fonts -->
+    <link href="https://fonts.cdnfonts.com/css/clash-display" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Satoshi:wght@400;500;700;900&display=swap" rel="stylesheet">
+
+    <style>
+        /* === THEME VARIABLES (PREMIUM CYBER CELO) === */
+        :root {
+            --bg-primary: #06080F;
+            --bg-secondary: #0A0D16;
+            --text-primary: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.6);
+            --accent-green: #35D07F;
+            --accent-gold: #FBCC5C;
+            --accent-glow: rgba(53, 208, 127, 0.2);
+            
+            --font-display: 'Clash Display', sans-serif;
+            --font-body: 'Satoshi', sans-serif;
+            
+            --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+            --duration-slow: 1.2s;
+            --duration-normal: 0.8s;
+            
+            /* Viewport scaling */
+            --title-size: clamp(3.5rem, 10vw, 7rem);
+            --h2-size: clamp(2.5rem, 7vw, 4.5rem);
+            --body-size: clamp(1rem, 2vw, 1.4rem);
+            --slide-padding: clamp(2rem, 12vw, 10rem);
+        }
+
+        /* === VIEWPORT BASE === */
+        html, body { height: 100%; overflow: hidden; margin: 0; background: var(--bg-primary); color: var(--text-primary); }
+        html { scroll-snap-type: y mandatory; scroll-behavior: smooth; }
+        
+        .slide {
+            width: 100vw; height: 100vh; height: 100dvh;
+            overflow: hidden; scroll-snap-align: start;
+            display: flex; flex-direction: column; position: relative;
+            font-family: var(--font-body);
+        }
+        
+        .slide-content {
+            flex: 1; display: flex; flex-direction: column; justify-content: center;
+            padding: var(--slide-padding); z-index: 10;
+            transition: transform 0.1s linear;
+        }
+
+        /* === CLEANER GLOBAL DECORATIONS === */
+        .grid-bg {
+            position: absolute; inset: 0;
+            background-image: linear-gradient(rgba(53, 208, 127, 0.03) 1px, transparent 1px),
+                              linear-gradient(90deg, rgba(53, 208, 127, 0.03) 1px, transparent 1px);
+            background-size: 80px 80px;
+            -webkit-mask-image: radial-gradient(circle at center, black, transparent 85%);
+                    mask-image: radial-gradient(circle at center, black, transparent 85%);
+            pointer-events: none;
+        }
+
+        .cursor-glow {
+            position: fixed; width: 500px; height: 500px;
+            background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+            border-radius: 50%; z-index: 1;
+            transform: translate(-50%, -50%);
+            mix-blend-mode: screen; pointer-events: none;
+        }
+
+        /* === TYPOGRAPHY === */
+        h1, h2 { font-family: var(--font-display); font-weight: 700; margin: 0; line-height: 0.9; letter-spacing: -0.05em; }
+        h1 { font-size: var(--title-size); }
+        h2 { font-size: var(--h2-size); margin-bottom: 3rem; }
+        
+        p { font-size: var(--body-size); line-height: 1.6; color: var(--text-secondary); max-width: 900px; }
+        
+        /* CLEANER HIGHLIGHTS */
+        .highlight { color: var(--accent-gold); position: relative; display: inline-block; }
+        .accent-text { color: var(--accent-green); font-weight: 900; }
+
+        /* === ANIMATIONS (THE "BEAUTIFUL" PART) === */
+        .reveal {
+            opacity: 0; transform: translateY(80px);
+            transition: opacity var(--duration-slow) var(--ease-out-expo),
+                        transform var(--duration-slow) var(--ease-out-expo),
+                        filter var(--duration-slow) var(--ease-out-expo);
+            filter: blur(20px);
+        }
+        
+        .slide.visible .reveal { opacity: 1; transform: translateY(0); filter: blur(0); }
+        
+        .delay-1 { transition-delay: 0.2s; }
+        .delay-2 { transition-delay: 0.4s; }
+        .delay-3 { transition-delay: 0.6s; }
+
+        /* Smooth Floating */
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-15px); }
+            100% { transform: translateY(0px); }
+        }
+
+        /* === COMPONENTS === */
+        .feature-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 2rem;
+            margin-top: 4rem;
+        }
+
+        .feature-card {
+            background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 3rem; border-radius: 40px; transition: all 0.6s var(--ease-out-expo);
+            backdrop-filter: blur(12px); animation: float 6s ease-in-out infinite;
+        }
+        .feature-card:nth-child(2) { animation-delay: -2s; }
+        .feature-card:nth-child(3) { animation-delay: -4s; }
+
+        .feature-card:hover { 
+            background: rgba(53, 208, 127, 0.07); border-color: rgba(53, 208, 127, 0.3);
+            transform: translateY(-20px) scale(1.02);
+            box-shadow: 0 40px 80px rgba(0,0,0,0.6);
+        }
+
+        .bullet-list { list-style: none; padding: 0; margin-top: 4rem; display: grid; gap: 2.5rem; }
+        .bullet-list li { display: flex; gap: 2rem; align-items: flex-start; font-size: var(--body-size); }
+        .bullet-list li::before {
+            content: ""; width: 12px; height: 12px; background: var(--accent-green);
+            border-radius: 50%; margin-top: 0.7rem; flex-shrink: 0;
+            box-shadow: 0 0 15px var(--accent-green);
+        }
+
+        /* Nav & Progress */
+        .nav-dots {
+            position: fixed; right: 3rem; top: 50%; transform: translateY(-50%);
+            display: flex; flex-direction: column; gap: 1.5rem; z-index: 100;
+        }
+        .dot {
+            width: 12px; height: 12px; border-radius: 50%; background: rgba(255,255,255,0.15);
+            cursor: pointer; transition: all 0.5s var(--ease-out-expo);
+        }
+        .dot.active { background: var(--accent-green); transform: scale(1.5); box-shadow: 0 0 20px var(--accent-green); }
+
+        .progress-bar {
+            position: fixed; top: 0; left: 0; height: 6px; background: linear-gradient(90deg, var(--accent-green), var(--accent-gold));
+            z-index: 1000; transition: width 0.4s var(--ease-out-expo);
+        }
+
+        /* Team Slide Style */
+        .profile-container {
+            display: flex; align-items: center; gap: 3rem; margin-top: 3rem;
+        }
+        .profile-pic {
+            width: 200px; height: 200px; border-radius: 50%; 
+            border: 4px solid var(--accent-green); -o-object-fit: cover; object-fit: cover;
+            box-shadow: 0 0 40px var(--accent-glow);
+        }
+
+        /* Demo Slide Style */
+        .demo-window {
+            width: 100%; max-width: 1000px; aspect-ratio: 16/9; background: #0D1117;
+            border-radius: 40px; border: 1px solid rgba(255,255,255,0.1); overflow: hidden;
+            margin: 3rem auto; position: relative;
+            box-shadow: 0 50px 100px rgba(0,0,0,0.8);
+        }
+        .demo-placeholder {
+            position: absolute; inset: 0; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; text-align: center;
+            background: linear-gradient(45deg, #0A0D16, #161B22);
+        }
+
+        /* QR Code Slide Style */
+        .qr-card {
+            background: white; width: 260px; height: 260px; margin: 3rem auto;
+            padding: 20px; border-radius: 30px; display: flex; align-items: center;
+            justify-content: center; transform: rotate(-3deg); transition: all 0.5s ease;
+        }
+        .qr-card:hover { transform: rotate(0deg) scale(1.1); }
+
+        /* Specific slide layouts */
+        .title-slide { align-items: center; text-align: center; }
+
+        /* Split Layout */
+        .split { display: grid; grid-template-columns: 1.2fr 0.8fr; gap: 5rem; align-items: center; }
+
+        /* Mobile Adjustments */
+        @media (max-width: 1024px) {
+            .split { grid-template-columns: 1fr; text-align: center; }
+            .profile-container { flex-direction: column; text-align: center; }
+            :root { --slide-padding: 3rem; }
+        }
+        /* Demo Window Styles */
+        .demo-window {
+            position: relative;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+        .demo-window:hover {
+            transform: scale(1.02);
+        }
+        .play-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 40px;
+            transition: background 0.3s ease;
+        }
+        .demo-window:hover .play-overlay {
+            background: rgba(0, 0, 0, 0.3);
+        }
+        .play-button {
+            width: 80px;
+            height: 80px;
+            background: rgba(46, 213, 115, 0.9);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 0 30px rgba(46, 213, 115, 0.5);
+            transition: all 0.3s ease;
+        }
+        .play-button::after {
+            content: '';
+            width: 0;
+            height: 0;
+            border-top: 15px solid transparent;
+            border-bottom: 15px solid transparent;
+            border-left: 25px solid white;
+            margin-left: 5px;
+        }
+        .demo-window:hover .play-button {
+            transform: scale(1.1);
+            background: #2ed573;
+            box-shadow: 0 0 50px rgba(46, 213, 115, 0.8);
+        }
+    </style>
 <link rel="manifest" href="/manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="/registerSW.js"></script></head>
-
 <body>
-  <div id="root"></div>
-</body>
+    <div class="progress-bar" id="progressBar"></div>
+    <div class="cursor-glow" id="cursorGlow"></div>
+    <nav class="nav-dots" id="navDots"></nav>
 
+    <!-- Slide 1: The Hook -->
+    <section class="slide title-slide">
+        <div class="grid-bg"></div>
+        <div class="slide-content">
+            <h1 class="reveal">Stop paying for <br><span class="highlight">wait times.</span></h1>
+            <p class="reveal delay-1" style="margin: 3rem auto 0; font-weight: 500; font-size: 1.4rem;">CRIA makes global remittances as simple as a text message.</p>
+        </div>
+    </section>
+
+    <!-- Slide 2: The Problem -->
+    <section class="slide">
+        <div class="grid-bg"></div>
+        <div class="slide-content">
+            <h2 class="reveal">Remittances are <span class="highlight">Exploitative.</span></h2>
+            <div class="feature-grid">
+                <div class="feature-card reveal delay-1">
+                    <h3 class="accent-text" style="font-size: 2rem; margin-bottom: 1rem;">7-10% Lost</h3>
+                    <p>Intermediaries drain billions from families every year through opaque, hidden fees.</p>
+                </div>
+                <div class="feature-card reveal delay-2">
+                    <h3 class="accent-text" style="font-size: 2rem; margin-bottom: 1rem;">3-Day Delay</h3>
+                    <p>Legacy systems lock capital in outdated pipes, forcing users to wait for their own money.</p>
+                </div>
+                <div class="feature-card reveal delay-3">
+                    <h3 class="accent-text" style="font-size: 2rem; margin-bottom: 1rem;">The "UX Wall"</h3>
+                    <p>Bridges and gas tokens are too complex. Global users need an agent that just works.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Slide 3: Value Proposition -->
+    <section class="slide title-slide">
+        <div class="grid-bg"></div>
+        <div class="slide-content">
+            <h2 class="reveal">Global payments at <span class="highlight">local speeds.</span></h2>
+            <p class="reveal delay-1" style="margin: 1rem auto 0; font-size: 1.6rem; color: white; font-weight: 700;">
+                CRIA settles stablecoins directly to bank accounts for <br> <span class="accent-text">&lt;1% fees</span> and near-instant finality.
+            </p>
+        </div>
+    </section>
+
+    <!-- Slide 4: How It Works -->
+    <section class="slide">
+        <div class="grid-bg"></div>
+        <div class="slide-content">
+            <div class="split">
+                <div>
+                    <h2 class="reveal">Voice → Intent → <span class="highlight">Settle.</span></h2>
+                    <ul class="bullet-list">
+                        <li class="reveal delay-1">
+                            <div>
+                                <strong style="color: white; display: block;">1. Speak</strong>
+                                "Send 50 USDC from Solana to Mom's NGN bank."
+                            </div>
+                        </li>
+                        <li class="reveal delay-2">
+                            <div>
+                                <strong style="color: white; display: block;">2. Resolve</strong>
+                                CRIA bridges liquidity and resolves ENS names automatically.
+                            </div>
+                        </li>
+                        <li class="reveal delay-3">
+                            <div>
+                                <strong style="color: white; display: block;">3. Deliver</strong>
+                                Funds land in the local bank account instantly via Chimoney.
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+                <div class="reveal delay-1" style="background: #0D1117; padding: 40px; border-radius: 40px; border: 1px solid #21262D;">
+                    <div style="font-family: monospace; font-size: 0.9rem;">
+                        <span style="color: var(--accent-green);">[TRANSCRIPT]</span> <br>
+                        "Send 50 USDC to southen.eth" <br><br>
+                        <span style="color: var(--accent-gold);">[RESOLVING]</span> southen.eth -> 0x3D0... <br>
+                        <span style="color: var(--accent-gold);">[BRIDGING]</span> Solana -> Celo (Squid) <br>
+                        <span style="color: var(--accent-green);">[SUCCESS]</span> Tx 0xc3fb... settled.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Slide 5: The Demo -->
+    <section class="slide">
+        <div class="grid-bg"></div>
+        <div class="slide-content" style="text-align: center;">
+            <h2 class="reveal">Watch CRIA <span class="highlight">in Action.</span></h2>
+            <div class="demo-window reveal delay-1">
+                <a href="https://youtube.com/shorts/tq6bfyvXmZs?feature=share" target="_blank" style="display: block; width: 100%; height: 100%; text-decoration: none;">
+                    <img src="/assets/demo_splash-ChumbZ_V.png" alt="Watch Demo" style="width: 100%; height: 100%; object-fit: cover; border-radius: 40px;">
+                    <div class="play-overlay">
+                        <div class="play-button"></div>
+                    </div>
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Slide 6: Market -->
+    <section class="slide">
+        <div class="grid-bg"></div>
+        <div class="slide-content">
+            <h2 class="reveal">The <span class="highlight">$100B+</span> African Opportunity.</h2>
+            <div class="feature-grid">
+                <div class="feature-card reveal delay-1">
+                    <h3>200M+ Users</h3>
+                    <p>Building for remote workers and families in Nigeria, Kenya, and Ghana.</p>
+                </div>
+                <div class="feature-card reveal delay-2">
+                    <h3>200% Growth</h3>
+                    <p>Stablecoin transaction volume in Africa is skyrocketing YoY. We are the gateway.</p>
+                </div>
+                <div class="feature-card reveal delay-3">
+                    <h3>7% Savings</h3>
+                    <p>By removing intermediaries, we return billions back into the local economy.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Slide 7: Business Model -->
+    <section class="slide">
+        <div class="grid-bg"></div>
+        <div class="slide-content">
+            <h2 class="reveal">Sustainable <span class="highlight">Growth.</span></h2>
+            <div class="feature-grid">
+                <div class="feature-card reveal delay-1">
+                    <h3 class="accent-text">0.5% Fee</h3>
+                    <p>Transparent fee per transaction. 10x cheaper than competitive legacy rails.</p>
+                </div>
+                <div class="feature-card reveal delay-2">
+                    <h3 class="accent-text">$250K ARR</h3>
+                    <p>Targeting 10k active users in year 1 with an average $500 monthly transfer volume.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Slide 8: Traction -->
+    <section class="slide">
+        <div class="grid-bg"></div>
+        <div class="slide-content">
+            <h2 class="reveal">Production Ready. <span class="highlight">Registered.</span></h2>
+            <div class="feature-grid">
+                <div class="feature-card reveal delay-1">
+                    <h3 class="accent-text">100% Finality</h3>
+                    <p>5/5 successful live on-chain transactions during our hardening phase.</p>
+                </div>
+                <div class="feature-card reveal delay-2">
+                    <h3 class="accent-text">Agent ID #2335</h3>
+                    <p>Fully registered on the ERC-8004 Registry. Verifiable on-chain.</p>
+                </div>
+                <div class="feature-card reveal delay-3">
+                    <h3 class="accent-text">Hardened State</h3>
+                    <p>User history and contacts pinned to Filecoin/IPFS for censorship resistance.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Slide 9: Roadmap -->
+    <section class="slide">
+        <div class="grid-bg"></div>
+        <div class="slide-content">
+            <h2 class="reveal">Quarterly <span class="highlight">Milestones.</span></h2>
+            <ul class="bullet-list">
+                <li class="reveal delay-1">
+                    <div>
+                        <strong style="color: white; display: block;">Q2 2026: Beta Launch</strong>
+                        Expanding to 10 corridors in East and West Africa.
+                    </div>
+                </li>
+                <li class="reveal delay-2">
+                    <div>
+                        <strong style="color: white; display: block;">Q3 2026: Merchant SDK</strong>
+                        Enabling local shops to accept global payments via CRIA.
+                    </div>
+                </li>
+                <li class="reveal delay-3">
+                    <div>
+                        <strong style="color: white; display: block;">Q4 2026: Agent Swarms</strong>
+                        Allowing CRIA to negotiate the best bridge rates across 50+ chains.
+                    </div>
+                </li>
+            </ul>
+        </div>
+    </section>
+
+    <!-- Slide 10: Team -->
+    <section class="slide">
+        <div class="grid-bg"></div>
+        <div class="slide-content">
+            <h2 class="reveal"><span class="highlight">Built</span> Solo. Driven by Mission.</h2>
+            <div class="profile-container reveal delay-1">
+                <img src="/assets/profile-DURwKNOW.png" alt="Founder" class="profile-pic">
+                <div>
+                    <h3 style="font-size: 2.5rem; margin: 0;">southen_</h3>
+                    <p style="color: var(--accent-green); font-weight: 700; font-size: 1.4rem;">Sole Developer & Architect</p>
+                    <p style="margin-top: 1.5rem; max-width: 600px; font-size: 1.2rem;">Architected the first client-side LLM failover engine and production-hardened the CRIA intent core in 72 hours.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Slide 11: Call to Action -->
+    <section class="slide title-slide">
+        <div class="grid-bg"></div>
+        <div class="slide-content">
+            <h2 class="reveal">Join the <span class="highlight">Financial Evolution.</span></h2>
+            <div class="qr-card reveal delay-1">
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=https://celo-agent-mobile.vercel.app/" alt="QR Code">
+            </div>
+            <p class="reveal delay-2" style="margin: 0 auto; font-weight: 900; letter-spacing: 0.3em; text-transform: uppercase;">Scan to test CRIA Pro</p>
+        </div>
+    </section>
+
+    <script>
+        class SlidePresentation {
+            constructor() {
+                this.slides = Array.from(document.querySelectorAll('.slide'));
+                this.dotsContainer = document.getElementById('navDots');
+                this.progressBar = document.getElementById('progressBar');
+                this.cursorGlow = document.getElementById('cursorGlow');
+                this.currentSlideIndex = 0;
+                
+                this.init();
+            }
+
+            init() {
+                this.setupIntersectionObserver();
+                this.setupKeyboardNav();
+                this.setupCursorGlow();
+                this.renderDots();
+                this.updateProgress();
+            }
+
+            setupCursorGlow() {
+                window.addEventListener('mousemove', (e) => {
+                    this.cursorGlow.style.left = e.clientX + 'px';
+                    this.cursorGlow.style.top = e.clientY + 'px';
+                    
+                    // Parallax on current slide
+                    const x = (e.clientX / window.innerWidth - 0.5) * 40;
+                    const y = (e.clientY / window.innerHeight - 0.5) * 40;
+                    this.slides[this.currentSlideIndex].querySelector('.slide-content').style.transform = `translate(${x}px, ${y}px)`;
+                });
+            }
+
+            setupIntersectionObserver() {
+                const observerOptions = { threshold: 0.5 };
+                const observer = new IntersectionObserver((entries) => {
+                    entries.forEach(entry => {
+                        if (entry.isIntersecting) {
+                            entry.target.classList.add('visible');
+                            this.currentSlideIndex = this.slides.indexOf(entry.target);
+                            this.updateDots();
+                            this.updateProgress();
+                        }
+                    });
+                }, observerOptions);
+
+                this.slides.forEach(slide => observer.observe(slide));
+            }
+
+            setupKeyboardNav() {
+                window.addEventListener('keydown', (e) => {
+                    if (e.key === 'ArrowDown' || e.key === ' ' || e.key === 'PageDown') {
+                        this.goToSlide(this.currentSlideIndex + 1);
+                    } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
+                        this.goToSlide(this.currentSlideIndex - 1);
+                    }
+                });
+            }
+
+            renderDots() {
+                this.slides.forEach((_, i) => {
+                    const dot = document.createElement('div');
+                    dot.classList.add('dot');
+                    dot.addEventListener('click', () => this.goToSlide(i));
+                    this.dotsContainer.appendChild(dot);
+                });
+            }
+
+            updateDots() {
+                const dots = Array.from(this.dotsContainer.querySelectorAll('.dot'));
+                dots.forEach((dot, i) => dot.classList.toggle('active', i === this.currentSlideIndex));
+            }
+
+            updateProgress() {
+                const progress = ((this.currentSlideIndex + 1) / this.slides.length) * 100;
+                this.progressBar.style.width = `${progress}%`;
+            }
+
+            goToSlide(index) {
+                if (index >= 0 && index < this.slides.length) {
+                    this.slides[index].scrollIntoView({ behavior: 'smooth' });
+                }
+            }
+        }
+
+        window.addEventListener('load', () => new SlidePresentation());
+    </script>
+</body>
 </html>

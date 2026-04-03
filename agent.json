@@ -1,0 +1,49 @@
+{
+  "name": "CRIA — OWS-Powered Remittance Agent",
+  "version": "3.0.0",
+  "description": "Policy-gated financial intent agent powered by OWS (Open Wallet Standard). Handles remittances, cross-chain bridging, and fiat off-ramps with x402 micropayments and OWS spending governance.",
+  "operatorWallet": "0x3D02DEF96FC41a74c7e6b939Bb17aF0dA3D66b3c",
+  "owsWallet": "cria-agent-treasury",
+  "erc8004Identity": "a9050f16-aa41-47f0-a981-fbc25399cccf",
+  "tokenId": "2335",
+  "network": "Celo",
+  "capabilities": [
+    "ows-wallet-management",
+    "ows-policy-engine",
+    "x402-payments",
+    "natural-language-intent-parsing",
+    "cross-chain-bridging",
+    "stablecoin-remittance",
+    "fiat-offramping",
+    "voice-to-intent"
+  ],
+  "owsPolicy": {
+    "id": "cria-remittance-limits",
+    "allowedChains": ["eip155:42220", "eip155:8453", "eip155:1", "solana:mainnet"],
+    "expires": "2027-01-01T00:00:00Z"
+  },
+  "x402Services": {
+    "intent-parse": "$0.01",
+    "balance-check": "$0.005",
+    "rate-lookup": "$0.002",
+    "bridge-quote": "$0.015"
+  },
+  "techStack": {
+    "framework": "React + xState Agent Core",
+    "wallet": "OWS (Open Wallet Standard)",
+    "blockchain": ["Celo", "Base", "Ethereum", "Solana"],
+    "model": "Gemini 2.0 Flash / GPT-3.5",
+    "payments": "x402 Protocol",
+    "integrations": ["Squid Router", "Chimoney", "Viem/Wagmi"]
+  },
+  "tools": [
+    "send_transfer",
+    "swap_assets",
+    "bridge_assets",
+    "offramp_to_fiat",
+    "check_balance",
+    "ows_sign_transaction",
+    "ows_check_policy",
+    "x402_pay_service"
+  ]
+}

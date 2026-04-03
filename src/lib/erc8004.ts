@@ -69,29 +69,39 @@ export interface AgentCard {
   version: string;
   endpoint: string;
   paymentAddress: string;
+  owsWallet?: string;
   capabilities: string[];
   reputationRegistry?: string;
+  x402Support: boolean;
+  owsPolicyEngine: boolean;
 }
 
 export const CRIA_AGENT_CARD: Omit<AgentCard, 'paymentAddress'> = {
-  name: "Celo Remittance Intent Agent (CRIA)",
-  description: "An autonomous agent for fast, low-cost remittances on Celo. Understands natural language, settles in ~5 seconds, with ERC-8004 identity and Self Protocol verification.",
-  version: "2.0.0",
+  name: "CRIA — OWS-Powered Remittance Agent",
+  description: "An autonomous agent for policy-gated, low-cost remittances powered by OWS (Open Wallet Standard). Natural language intent parsing, x402 micropayments, cross-chain bridging, and ERC-8004 on-chain identity.",
+  version: "3.0.0",
   endpoint: "https://celo-agent-mobile.vercel.app",
   capabilities: [
+    "ows-wallet-management",
+    "ows-policy-engine",
+    "x402-payments",
     "remittance",
     "stablecoin-transfer",
-    "fee-abstraction",
+    "cross-chain-bridging",
+    "fiat-offramp",
     "intent-parsing",
     "balance-check",
     "exchange-rate",
   ],
+  x402Support: true,
+  owsPolicyEngine: true,
 };
 
 export function generateAgentIdentity(address: string): AgentCard {
   return {
     ...CRIA_AGENT_CARD,
     paymentAddress: address,
+    owsWallet: address,
   };
 }
 
@@ -101,7 +111,7 @@ export function generateAgentIdentity(address: string): AgentCard {
 export function buildAgentURI(address: string, deployedUrl?: string): string {
   const card = {
     type: "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
-    name: "CRIA - Celo Remittance Intent Agent",
+    name: "CRIA — OWS-Powered Remittance Agent",
     description: CRIA_AGENT_CARD.description,
     image: "https://celo-agent-mobile.vercel.app/icon-512.png",
     services: [
@@ -109,8 +119,19 @@ export function buildAgentURI(address: string, deployedUrl?: string): string {
         name: "web",
         endpoint: deployedUrl || "https://celo-agent-mobile.vercel.app",
       },
+      {
+        name: "x402",
+        endpoint: (deployedUrl || "https://celo-agent-mobile.vercel.app") + "/api/x402-gateway",
+        pricing: {
+          'intent-parse': '$0.01',
+          'balance-check': '$0.005',
+          'rate-lookup': '$0.002',
+        }
+      }
     ],
     x402Support: true,
+    owsPolicyEngine: true,
+    owsWallet: address,
     active: true,
   };
   const json = JSON.stringify(card);

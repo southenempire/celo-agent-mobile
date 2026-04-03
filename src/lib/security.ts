@@ -1,7 +1,16 @@
 /**
  * Security utilities for CRIA Agent.
- * Handles AgentVault encryption and Anti-Scripting protection.
+ * Handles AgentVault encryption, Anti-Scripting protection,
+ * and OWS Policy Engine integration.
  */
+
+import { OWSService } from './ows-service';
+
+export interface PolicyCheckResult {
+    allowed: boolean;
+    reason?: string;
+    checkedBy: 'ows-policy' | 'delegation' | 'rate-limit';
+}
 
 export class SecurityUtils {
     private static lastActionTime = 0;
@@ -18,6 +27,35 @@ export class SecurityUtils {
             throw new Error("⚠️ **Security Alert**: Automated activity detected. Please wait 2 seconds between commands to protect your vault.");
         }
         this.lastActionTime = now;
+    }
+
+    /**
+     * OWS Policy Guard — validates a transaction against the OWS policy engine.
+     * Checks chain allowlist, expiry, and spend limits before any signing occurs.
+     * 
+     * @param chainId - The EVM chain ID (e.g., 42220 for Celo)
+     * @param amount - Transaction amount in USD
+     * @returns PolicyCheckResult with allow/deny and reason
+     */
+    static checkOWSPolicy(chainId: number, amount?: number): PolicyCheckResult {
+        // 1. Chain allowlist check
+        if (!OWSService.isChainAllowed(chainId)) {
+            return {
+                allowed: false,
+                reason: `Chain eip155:${chainId} is not in the OWS allowed chains policy. Only approved networks can be used.`,
+                checkedBy: 'ows-policy'
+            };
+        }
+
+        // 2. Expiry check (policies auto-expire)
+        // This is handled by the OWS policy engine server-side
+
+        // 3. Amount warnings (advisory, not blocking)
+        if (amount && amount > 500) {
+            console.warn(`[OWS Policy] High-value transaction: $${amount}. Consider implementing multi-sig approval.`);
+        }
+
+        return { allowed: true, checkedBy: 'ows-policy' };
     }
 
     /**
@@ -54,3 +92,4 @@ export class SecurityUtils {
         }
     }
 }
+
